@@ -32,6 +32,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to parse transaction XDR" }, { status: 400 });
     }
 
+    // Auth challenges must be standard transactions; fee-bump wrappers do not expose source.
+    if (!("source" in tx)) {
+      return NextResponse.json({ error: "Invalid transaction type" }, { status: 400 });
+    }
+
     // Ensure the source account matches the address
     if (tx.source !== address) {
       return NextResponse.json({ error: "Transaction source account mismatch" }, { status: 400 });
@@ -43,6 +48,7 @@ export async function POST(request: NextRequest) {
       !op ||
       op.type !== "manageData" ||
       op.name !== "StellarStar Auth" ||
+      !op.value ||
       op.value.toString() !== nonce
     ) {
       return NextResponse.json({ error: "Invalid challenge operation parameters" }, { status: 400 });
