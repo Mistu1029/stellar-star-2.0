@@ -77,6 +77,25 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const channelRef = useRef<any>(null);
   const { publicKey } = useWalletContext();
 
+  const saveTripsToCache = useCallback((tripsToCache: Trip[]) => {
+    if (!publicKey) return;
+    try {
+      localStorage.setItem(`${LS_TRIPS}:${publicKey}`, JSON.stringify(tripsToCache));
+    } catch (err) {
+      console.warn("Failed to write trips to cache:", err);
+    }
+  }, [publicKey]);
+
+  const loadTripsFromCache = useCallback(() => {
+    if (!publicKey) return [];
+    try {
+      const raw = localStorage.getItem(`${LS_TRIPS}:${publicKey}`);
+      return raw ? (JSON.parse(raw) as Trip[]) : [];
+    } catch {
+      return [];
+    }
+  }, [publicKey]);
+
   const getClient = useCallback(() => {
     if (!isSupabaseConfigured() || !supabase) {
       throw new Error("Supabase is not configured.");
@@ -88,6 +107,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function loadTrips() {
+      if (!publicKey) {
+        setTrips([]);
+        setIsLoading(false);
+        return;
+      }
       try {
         if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
         const client = getClient();
@@ -101,7 +125,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         if (isMounted && data) {
           const trips = data.map(dbRowToTrip);
           setTrips(trips);
-          localStorage.setItem(LS_TRIPS, JSON.stringify(trips));
+          saveTripsToCache(trips);
         }
       } catch (err: any) {
         console.warn("Failed to load trips from Supabase, using localStorage:", err);
@@ -109,13 +133,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           setIsOffline(true);
           setError(err?.message || "Failed to connect to database");
         }
-        try {
-          const raw = localStorage.getItem(LS_TRIPS);
-          if (raw && isMounted) {
-            setTrips(JSON.parse(raw) as Trip[]);
-          }
-        } catch {
-          // ignore
+        if (isMounted) {
+          setTrips(loadTripsFromCache());
         }
       } finally {
         if (isMounted) {
@@ -129,7 +148,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [getClient]);
+  }, [getClient, loadTripsFromCache, publicKey, saveTripsToCache]);
 
 
   useEffect(() => {
@@ -145,7 +164,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           setTrips((prev) => {
             if (prev.some((t) => t.id === newTrip.id)) return prev;
             const updated = [newTrip, ...prev];
-            localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+            saveTripsToCache(updated);
             return updated;
           });
         }
@@ -159,7 +178,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
             const updated = prev.map((t) =>
               t.id === updatedTrip.id ? updatedTrip : t
             );
-            localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+            saveTripsToCache(updated);
             return updated;
           });
         }
@@ -172,7 +191,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           if (!deletedId) return;
           setTrips((prev) => {
             const updated = prev.filter((t) => t.id !== deletedId);
-            localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+            saveTripsToCache(updated);
             return updated;
           });
         }
@@ -184,14 +203,14 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [isLoading]);
+  }, [isLoading, saveTripsToCache]);
 
   const addTrip = useCallback(async (trip: Trip) => {
     if (!publicKey) throw new Error("Wallet not connected");
 
     setTrips((prev) => {
       const updated = [trip, ...prev];
-      localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+      saveTripsToCache(updated);
       return updated;
     });
 
@@ -204,12 +223,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       setTrips((prev) => {
         const rolled = prev.filter((t) => t.id !== trip.id);
-        localStorage.setItem(LS_TRIPS, JSON.stringify(rolled));
+        saveTripsToCache(rolled);
         return rolled;
       });
       throw error;
     }
-  }, [getClient, publicKey]);
+  }, [getClient, publicKey, saveTripsToCache]);
 
   const updateTrip = useCallback(
     async (id: string, updates: Partial<Trip>) => {
@@ -230,7 +249,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
         setTrips((prev) => {
           const updated = prev.map((t) => (t.id === id ? merged : t));
-          localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+          saveTripsToCache(updated);
           return updated;
         });
       } catch (err) {
@@ -239,12 +258,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           const updated = prev.map((t) =>
             t.id === id ? { ...t, ...updates } : t
           );
-          localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+          saveTripsToCache(updated);
           return updated;
         });
       }
     },
-    [trips, getClient, publicKey]
+    [trips, getClient, publicKey, saveTripsToCache]
   );
 
   const deleteTrip = useCallback(async (id: string) => {
@@ -257,10 +276,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
     setTrips((prev) => {
       const updated = prev.filter((t) => t.id !== id);
-      localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+      saveTripsToCache(updated);
       return updated;
     });
-  }, [getClient]);
+  }, [getClient, saveTripsToCache]);
 
   const addExpenseToTrip = useCallback(
     async (tripId: string, expenseId: string) => {
@@ -282,7 +301,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
           const updated = prev.map((t) =>
             t.id === tripId ? { ...t, expenseIds } : t
           );
-          localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+          saveTripsToCache(updated);
           return updated;
         });
       } catch (err) {
@@ -293,12 +312,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
               ? { ...t, expenseIds: [...t.expenseIds, expenseId] }
               : t
           );
-          localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+          saveTripsToCache(updated);
           return updated;
         });
       }
     },
-    [trips, getClient]
+    [trips, getClient, saveTripsToCache]
   );
 
   const settleTrip = useCallback(async (id: string) => {
@@ -313,18 +332,18 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
       setTrips((prev) => {
         const updated = prev.map((t) => (t.id === id ? { ...t, settled: true } : t));
-        localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+        saveTripsToCache(updated);
         return updated;
       });
     } catch (err) {
       console.error("Failed to settle trip in Supabase:", err);
       setTrips((prev) => {
         const updated = prev.map((t) => (t.id === id ? { ...t, settled: true } : t));
-        localStorage.setItem(LS_TRIPS, JSON.stringify(updated));
+        saveTripsToCache(updated);
         return updated;
       });
     }
-  }, [getClient]);
+  }, [getClient, saveTripsToCache]);
 
   const getTrip = useCallback(
     (id: string) => trips.find((t) => t.id === id),

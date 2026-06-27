@@ -82,6 +82,25 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
   const { publicKey } = useWalletContext();
+ 
+  const saveExpensesToCache = useCallback((expensesToCache: Expense[]) => {
+    if (!publicKey) return;
+    try {
+      localStorage.setItem(`${LS_EXPENSES}:${publicKey}`, JSON.stringify(expensesToCache));
+    } catch (err) {
+      console.warn("Failed to write expenses to cache:", err);
+    }
+  }, [publicKey]);
+ 
+  const loadExpensesFromCache = useCallback(() => {
+    if (!publicKey) return [];
+    try {
+      const raw = localStorage.getItem(`${LS_EXPENSES}:${publicKey}`);
+      return raw ? (JSON.parse(raw) as Expense[]) : [];
+    } catch {
+      return [];
+    }
+  }, [publicKey]);
 
   // Get the appropriate Supabase client (authenticated if wallet connected)
   const getClient = useCallback(() => {
@@ -96,6 +115,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     async function loadExpenses() {
+      if (!publicKey) {
+        setExpenses([]);
+        setIsLoading(false);
+        return;
+      }
       try {
         if (!isSupabaseConfigured()) throw new Error("Supabase not configured");
         const client = getClient();
@@ -110,7 +134,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         if (isMounted && data) {
           const expenses = data.map(dbRowToExpense);
           setExpenses(expenses);
-          localStorage.setItem(LS_EXPENSES, JSON.stringify(expenses));
+          saveExpensesToCache(expenses);
         }
       } catch (err: any) {
         console.warn("Failed to load from Supabase, using localStorage:", err);
@@ -118,11 +142,8 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           setIsOffline(true);
           setError(err?.message || "Failed to connect to database");
         }
-        try {
-          const raw = localStorage.getItem(LS_EXPENSES);
-          if (raw && isMounted) setExpenses(JSON.parse(raw) as Expense[]);
-        } catch {
-          // ignore
+        if (isMounted) {
+          setExpenses(loadExpensesFromCache());
         }
       } finally {
         if (isMounted) {
@@ -136,7 +157,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [getClient]);
+  }, [getClient, loadExpensesFromCache, publicKey, saveExpensesToCache]);
 
   useEffect(() => {
     if (isLoading || !supabase) return;
@@ -151,7 +172,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           setExpenses((prev) => {
             if (prev.some((e) => e.id === newExpense.id)) return prev;
             const updated = [newExpense, ...prev];
-            localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+        saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -165,7 +186,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
             const updated = prev.map((e) =>
               e.id === updatedExpense.id ? updatedExpense : e
             );
-            localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+        saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -178,7 +199,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           if (!deletedId) return;
           setExpenses((prev) => {
             const updated = prev.filter((e) => e.id !== deletedId);
-            localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+        saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -190,14 +211,14 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [isLoading]);
+  }, [isLoading, saveExpensesToCache]);
 
   const addExpense = useCallback(async (expense: Expense) => {
     if (!publicKey) throw new Error("Wallet not connected");
 
     setExpenses((prev) => {
       const updated = [expense, ...prev];
-      localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+      saveExpensesToCache(updated);
       return updated;
     });
 
@@ -210,12 +231,12 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       setExpenses((prev) => {
         const rolled = prev.filter((e) => e.id !== expense.id);
-        localStorage.setItem(LS_EXPENSES, JSON.stringify(rolled));
+        saveExpensesToCache(rolled);
         return rolled;
       });
       throw error;
     }
-  }, [getClient, publicKey]);
+  }, [getClient, publicKey, saveExpensesToCache]);
 
   const updateExpense = useCallback(
     async (id: string, updates: Partial<Expense>) => {
@@ -236,7 +257,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
         setExpenses((prev) => {
           const updated = prev.map((e) => (e.id === id ? merged : e));
-          localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+          saveExpensesToCache(updated);
           return updated;
         });
       } catch (err) {
@@ -245,12 +266,12 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           const updated = prev.map((e) =>
             e.id === id ? { ...e, ...updates } : e
           );
-          localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+          saveExpensesToCache(updated);
           return updated;
         });
       }
     },
-    [expenses, getClient, publicKey]
+    [expenses, getClient, publicKey, saveExpensesToCache]
   );
 
   const deleteExpense = useCallback(async (id: string) => {
@@ -262,18 +283,18 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
       setExpenses((prev) => {
         const updated = prev.filter((e) => e.id !== id);
-        localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+        saveExpensesToCache(updated);
         return updated;
       });
     } catch (err) {
       console.error("Failed to delete expense from Supabase:", err);
-      setExpenses((prev) => {
-        const updated = prev.filter((e) => e.id !== id);
-        localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
-        return updated;
-      });
+        setExpenses((prev) => {
+          const updated = prev.filter((e) => e.id !== id);
+          saveExpensesToCache(updated);
+          return updated;
+        });
     }
-  }, [getClient]);
+  }, [getClient, saveExpensesToCache]);
 
   const markSharePaid = useCallback(
     async (expenseId: string, memberId: string, txHash: string) => {
@@ -289,7 +310,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           const settled = shares.every((s) => s.paid);
           return { ...e, shares, settled };
         });
-        localStorage.setItem(LS_EXPENSES, JSON.stringify(updated));
+        saveExpensesToCache(updated);
         return updated;
       });
 
@@ -327,20 +348,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           const synced = prev.map((e) =>
             e.id !== expenseId ? e : { ...e, shares: freshShares, settled: freshSettled }
           );
-          localStorage.setItem(LS_EXPENSES, JSON.stringify(synced));
+          saveExpensesToCache(synced);
           return synced;
         });
       } catch (err) {
         console.error("Failed to persist markSharePaid to Supabase:", err);
         setExpenses((prev) => {
           const rolled = prev.map((e) => (e.id === expenseId ? current : e));
-          localStorage.setItem(LS_EXPENSES, JSON.stringify(rolled));
+          saveExpensesToCache(rolled);
           return rolled;
         });
         throw err;
       }
     },
-    [expenses, getClient]
+    [expenses, getClient, saveExpensesToCache]
   );
 
   const getExpense = useCallback(

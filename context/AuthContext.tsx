@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { supabase, createAuthenticatedClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { useWalletContext } from "./WalletContext";
-import { LS_USER } from "@/lib/utils/constants";
+import { LS_USER, LS_PUBLIC_KEY } from "@/lib/utils/constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,19 +55,28 @@ function dbRowToUser(row: any): User {
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
 function saveUserToCache(user: User) {
-  try { localStorage.setItem(LS_USER, JSON.stringify(user)); } catch {}
+  try {
+    if (user.walletAddress) {
+      localStorage.setItem(`${LS_USER}:${user.walletAddress}`, JSON.stringify(user));
+    }
+  } catch {}
 }
 
 function loadUserFromCache(): User | null {
   try {
-    const raw = localStorage.getItem(LS_USER);
+    const savedKey = localStorage.getItem(LS_PUBLIC_KEY);
+    if (!savedKey) return null;
+    const raw = localStorage.getItem(`${LS_USER}:${savedKey}`);
     return raw ? (JSON.parse(raw) as User) : null;
   } catch { return null; }
 }
 
-function clearUserCache() {
+function clearUserCache(walletAddress?: string | null) {
   try {
-    localStorage.removeItem(LS_USER);
+    const key = walletAddress || localStorage.getItem(LS_PUBLIC_KEY);
+    if (key) {
+      localStorage.removeItem(`${LS_USER}:${key}`);
+    }
     localStorage.removeItem("StellarStar:authToken");
   } catch {}
 }
@@ -121,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!publicKey || (typeof window !== "undefined" && !localStorage.getItem("StellarStar:authToken"))) {
       setUser(null);
-      clearUserCache();
+      clearUserCache(publicKey);
       setIsLoading(false);
       return;
     }
@@ -142,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) {
           if (error.code === "PGRST116" || error.message?.includes("token") || error.message?.includes("JWT") || error.message?.includes("invalid") || error.message?.includes("expired")) {
             setUser(null);
-            clearUserCache();
+            clearUserCache(publicKey);
           }
         } else if (data) {
           const loadedUser = dbRowToUser(data);
