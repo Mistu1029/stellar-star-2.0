@@ -22,6 +22,9 @@ interface SplitCalculatorProps {
   connectedWalletAddress?: string | null;
   /** Payer’s wallet address — never show Pay button for the payer, even if wallets overlap. */
   payerWalletAddress?: string;
+  poolBalance?: string | null;
+  depositLoading?: boolean;
+  onDepositPool?: (amount: string) => Promise<boolean>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -36,6 +39,9 @@ export function SplitCalculator({
   disablePay = false,
   connectedWalletAddress,
   payerWalletAddress,
+  poolBalance,
+  depositLoading,
+  onDepositPool,
 }: SplitCalculatorProps) {
   const total = parseFloat(totalAmount) || 0;
   const splitTotal = shares.reduce((s, x) => s + parseFloat(x.amount), 0);
@@ -94,6 +100,9 @@ export function SplitCalculator({
             isPaying={payingShareId === share.memberId}
             connectedWalletAddress={connectedWalletAddress}
             payerWalletAddress={payerWalletAddress}
+            poolBalance={poolBalance}
+            depositLoading={depositLoading}
+            onDepositPool={onDepositPool}
           />
         ))}
       </div>

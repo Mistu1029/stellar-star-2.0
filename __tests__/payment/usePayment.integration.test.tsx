@@ -2,7 +2,7 @@
 
 import { buildPaymentTransaction } from "@/lib/stellar/buildTransaction";
 import { submitSignedTransaction } from "@/lib/stellar/submitTransaction";
-import { checkIsPaid, precheckPoolBalance, recordPaymentOnChain } from "@/lib/stellar/contract";
+import { checkIsPaid, precheckPoolBalance, recordPaymentOnChain, getPoolBalanceStroops, depositPoolBalance } from "@/lib/stellar/contract";
 import { signXDR } from "@/lib/freighter";
 import type { SplitShare } from "@/types/expense";
 
@@ -77,6 +77,8 @@ describe("usePayment integration flow", () => {
     const verifyTransactionModule = jest.requireMock("@/lib/stellar/verifyTransaction") as { verifyPaymentTransaction: jest.Mock };
     verifyTransactionModule.verifyPaymentTransaction.mockResolvedValue({ valid: true });
     jest.mocked(recordPaymentOnChain).mockResolvedValue({ success: true, ledger: 322 });
+    jest.mocked(getPoolBalanceStroops).mockResolvedValue(15000000n);
+    jest.mocked(depositPoolBalance).mockResolvedValue({ success: true, ledger: 400 });
   });
 
   it("completes payment and records on-chain successfully", async () => {
@@ -129,5 +131,71 @@ describe("usePayment integration flow", () => {
     });
 
     expect(recordPaymentOnChain).toHaveBeenCalledTimes(2);
+  });
+
+  it("handles payment flow when pool balance is insufficient, refilling, and retrying", async () => {
+    // 1. Initial mock states: pool balance is low
+    jest.mocked(precheckPoolBalance).mockResolvedValueOnce({
+      ok: false,
+      requiredStroops: 15000000n,
+      balanceStroops: 0n,
+      error: "Pool balance too low",
+    });
+
+    jest.mocked(getPoolBalanceStroops).mockResolvedValueOnce(0n); // initial load
+    jest.mocked(depositPoolBalance).mockResolvedValueOnce({ success: true, ledger: 410 });
+    jest.mocked(getPoolBalanceStroops).mockResolvedValueOnce(15000000n); // load after deposit
+
+    const { result } = renderHook(() => usePayment({ expenseId: "exp-3" }));
+
+    // Verify initial pool balance load
+    await waitFor(() => {
+      expect(jest.mocked(getPoolBalanceStroops)).toHaveBeenCalled();
+    });
+
+    // Attempt payment
+    await act(async () => {
+      await result.current.payShare({
+        share,
+        expenseTitle: "Lunch",
+        payerWalletAddress: "GEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+        tripId: "trip-3",
+      });
+    });
+
+    // Should lead to partial success due to insufficient pool balance
+    await waitFor(() => {
+      expect(result.current.paymentState.status).toBe("partial_success");
+      expect(result.current.paymentState.onChain).toBe(false);
+    });
+
+    // Now call deposit to resolve the shortfall
+    let depositResult = false;
+    await act(async () => {
+      depositResult = await result.current.depositPool("1.5000000");
+    });
+
+    expect(depositResult).toBe(true);
+    expect(jest.mocked(depositPoolBalance)).toHaveBeenCalledWith(
+      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "1.5000000"
+    );
+
+    // Mock pool check to succeed now that the user has refilled
+    jest.mocked(precheckPoolBalance).mockResolvedValueOnce({
+      ok: true,
+      requiredStroops: 15000000n,
+      balanceStroops: 15000000n,
+    });
+
+    // Retry recording
+    await act(async () => {
+      await result.current.retryOnChainRecord();
+    });
+
+    await waitFor(() => {
+      expect(result.current.paymentState.status).toBe("success");
+      expect(result.current.paymentState.onChain).toBe(true);
+    });
   });
 });

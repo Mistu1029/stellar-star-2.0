@@ -19,7 +19,15 @@ export function ExpenseCard({ expense, currentUserPublicKey, onDelete, tripId }:
   const [expanded, setExpanded] = useState(false);
   const [payingShareId, setPayingShareId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { payShare, paymentState, reset, retryOnChainRecord } = usePayment({ expenseId: expense.id });
+  const {
+    payShare,
+    paymentState,
+    reset,
+    retryOnChainRecord,
+    poolBalance,
+    depositLoading,
+    depositPool,
+  } = usePayment({ expenseId: expense.id });
 
   const paidCount = expense.shares.filter((share) => share.paid).length;
   const total = parseFloat(expense.totalAmount);
@@ -119,6 +127,9 @@ export function ExpenseCard({ expense, currentUserPublicKey, onDelete, tripId }:
                 onPay={handlePay}
                 payingShareId={payingShareId ?? undefined}
                 connectedWalletAddress={currentUserPublicKey}
+                poolBalance={poolBalance}
+                depositLoading={depositLoading}
+                onDepositPool={depositPool}
               />
 
               {paymentState.status !== "idle" && (

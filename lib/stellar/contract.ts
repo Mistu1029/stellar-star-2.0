@@ -152,7 +152,7 @@ async function getPoolContractId(callerPublicKey: string): Promise<string> {
   return native;
 }
 
-async function getPoolBalanceStroops(
+export async function getPoolBalanceStroops(
   callerPublicKey: string,
   memberPublicKey: string,
 ): Promise<bigint> {
@@ -209,6 +209,92 @@ export async function precheckPoolBalance(
   } catch (err) {
     const message = err instanceof Error ? err.message : "Pool precheck failed.";
     return { ok: false, requiredStroops, error: message };
+  }
+}
+
+export interface DepositPoolResult {
+  success: boolean;
+  ledger?: number;
+  error?: string;
+}
+
+export async function depositPoolBalance(
+  memberPublicKey: string,
+  amountXlm: string,
+  onStatus?: (step: "simulating" | "signing" | "sending" | "confirming") => void,
+): Promise<DepositPoolResult> {
+  if (!contractReady("depositPoolBalance")) {
+    return { success: false, error: "Contract not configured." };
+  }
+
+  try {
+    const account = await loadAccount(memberPublicKey);
+    const poolContractId = await getPoolContractId(memberPublicKey);
+    const poolContract = new Contract(poolContractId);
+
+    const amountStroops = xlmToStroops(amountXlm);
+    const contractArgs = [
+      new Address(memberPublicKey).toScVal(),
+      nativeToScVal(amountStroops, { type: "i128" }),
+    ];
+
+    const tx = new TransactionBuilder(account, {
+      fee: SOROBAN_BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(poolContract.call("deposit", ...contractArgs))
+      .setTimeout(60)
+      .build();
+
+    onStatus?.("simulating");
+    const simResult = await sorobanServer.simulateTransaction(tx);
+
+    if (rpc.Api.isSimulationError(simResult)) {
+      throw new Error(decodeContractError(simResult.error));
+    }
+    if (!rpc.Api.isSimulationSuccess(simResult)) {
+      throw new Error("Contract simulation returned an unexpected result.");
+    }
+
+    const assembled = rpc.assembleTransaction(tx, simResult).build();
+
+    onStatus?.("signing");
+    const signedXdr = await signXDR(assembled.toXDR(), NETWORK_PASSPHRASE);
+
+    onStatus?.("sending");
+    const sendResult = await sorobanServer.sendTransaction(
+      TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE)
+    );
+
+    if (sendResult.status === "ERROR") {
+      throw new Error(
+        `Contract send failed: ${sendResult.errorResult?.result()?.toXDR("base64") ?? "unknown error"}`
+      );
+    }
+
+    onStatus?.("confirming");
+    const txHash_ = sendResult.hash;
+
+    for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+      await sleep(POLL_INTERVAL_MS);
+      const pollResult = await sorobanServer.getTransaction(txHash_);
+
+      if (pollResult.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+        return { success: true, ledger: (pollResult as { ledger: number }).ledger };
+      }
+      if (pollResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+        const failedResult = pollResult as { resultXdr?: { toXDR?: () => unknown } };
+        const rawMsg = failedResult.resultXdr
+          ? `Contract error: ${String(failedResult.resultXdr)}`
+          : "Contract transaction was submitted but failed on-chain.";
+        throw new Error(decodeContractError(rawMsg));
+      }
+    }
+
+    throw new Error("Contract transaction timed out waiting for confirmation.");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Deposit failed.";
+    return { success: false, error: message };
   }
 }
 

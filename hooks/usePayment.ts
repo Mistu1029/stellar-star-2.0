@@ -1,9 +1,9 @@
                                                                  "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { buildPaymentTransaction } from "@/lib/stellar/buildTransaction";
 import { submitSignedTransaction } from "@/lib/stellar/submitTransaction";
-import { recordPaymentOnChain, checkIsPaid, precheckPoolBalance } from "@/lib/stellar/contract";
+import { recordPaymentOnChain, checkIsPaid, precheckPoolBalance, getPoolBalanceStroops, depositPoolBalance, stroopsToXlm } from "@/lib/stellar/contract";
 import { verifyPaymentTransaction } from "@/lib/stellar/verifyTransaction";
 import { signXDR } from "@/lib/freighter";
 import { useWallet } from "@/hooks/useWallet";
@@ -52,6 +52,55 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
   const [paymentState, setPaymentState] = useState<PaymentState>({ status: "idle" });
   const [pendingOnChain, setPendingOnChain] = useState<PendingOnChainRecord | null>(null);
+
+  const [poolBalance, setPoolBalance] = useState<string | null>(null);
+  const [depositLoading, setDepositLoading] = useState(false);
+
+  const loadPoolBalance = useCallback(async () => {
+    if (!publicKey) {
+      setPoolBalance(null);
+      return;
+    }
+    try {
+      const balanceStroops = await getPoolBalanceStroops(publicKey, publicKey);
+      setPoolBalance(stroopsToXlm(balanceStroops));
+    } catch (err) {
+      console.error("Failed to load pool balance:", err);
+      setPoolBalance(null);
+    }
+  }, [publicKey]);
+
+  useEffect(() => {
+    loadPoolBalance();
+  }, [loadPoolBalance]);
+
+  const depositPool = useCallback(
+    async (amountXlm: string) => {
+      if (!publicKey) {
+        toastError("Wallet not connected", "Please connect your Freighter wallet first.");
+        return false;
+      }
+      setDepositLoading(true);
+      try {
+        const result = await depositPoolBalance(publicKey, amountXlm);
+        if (result.success) {
+          toastSuccess("Deposit successful", `Deposited ${parseFloat(amountXlm).toFixed(4)} XLM into pool.`);
+          await loadPoolBalance();
+          return true;
+        } else {
+          toastError("Deposit failed", result.error ?? "Unknown error");
+          return false;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Deposit failed.";
+        toastError("Deposit failed", msg);
+        return false;
+      } finally {
+        setDepositLoading(false);
+      }
+    },
+    [publicKey, loadPoolBalance, toastError, toastSuccess]
+  );
 
   const reset = useCallback(() => {
     setPaymentState({ status: "idle" });
@@ -126,7 +175,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       onChain: true,
     });
     toastSuccess("On-chain record recovered", "Payment is now confirmed in the contract.");
-  }, [pendingOnChain, toastError, toastSuccess]);
+    loadPoolBalance();
+  }, [pendingOnChain, toastError, toastSuccess, loadPoolBalance]);
 
   const payShare = useCallback(
     async ({ share, expenseTitle, payerWalletAddress, tripId }: PayShareParams) => {
@@ -224,6 +274,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
               if (contractResult.success) {
                 onChain = true;
+                loadPoolBalance();
               } else {
                 onChainError = contractResult.error ?? "On-chain recording failed.";
                 setPendingOnChain({
@@ -279,7 +330,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         toastError("Payment failed", display);
       }
     },
-    [publicKey, expenseId, markSharePaid, refreshBalance, toastSuccess, toastError, toastInfo],
+    [publicKey, expenseId, markSharePaid, refreshBalance, toastSuccess, toastError, toastInfo, loadPoolBalance],
   );
 
   return {
@@ -287,6 +338,10 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
     payShare,
     reset,
     retryOnChainRecord,
+    poolBalance,
+    depositLoading,
+    depositPool,
+    loadPoolBalance,
     isIdle:    paymentState.status === "idle",
     isLoading: ["building", "signing", "submitting", "recording"].includes(paymentState.status),
     isSuccess: paymentState.status === "success",

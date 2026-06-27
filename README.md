@@ -228,6 +228,13 @@ get_payments(trip_id)
 is_paid(expense_id, member)
 ```
 
+### 💰 Settlement Pool Contract
+
+SettleX employs a pool contract architecture where member balances are tracked. When recording a payment on-chain, the settlement contract calls the pool contract to withdraw the member's share amount:
+- **`deposit(member, amount)`**: Allows any member to deposit mock pool credits for themselves (requires member's signature).
+- **`withdraw(from, amount)`**: Withdraws credit from a member (requires member's signature).
+- **`balance_of(member)`**: Returns the current mock pool credit balance for a member.
+
 ### 🛡️ Contract Guarantees
 
 - ✅ **Prevent duplicate settlement** for same expense/member pair

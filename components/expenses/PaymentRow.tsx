@@ -26,6 +26,9 @@ interface PaymentRowProps {
   connectedWalletAddress?: string | null;
   /** Payer's wallet address — guard against showing Pay for the payer row. */
   payerWalletAddress?: string;
+  poolBalance?: string | null;
+  depositLoading?: boolean;
+  onDepositPool?: (amount: string) => Promise<boolean>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -38,6 +41,9 @@ export function PaymentRow({
   isPaying = false,
   connectedWalletAddress,
   payerWalletAddress,
+  poolBalance,
+  depositLoading,
+  onDepositPool,
 }: PaymentRowProps) {
   const [showReceipt, setShowReceipt] = useState(false);
   const explorerUrl = share.walletAddress
@@ -141,6 +147,43 @@ export function PaymentRow({
             )}
           </div>
         </div>
+ 
+        {/* Pool balance display for the connected user */}
+        {isMyRow && !share.paid && poolBalance !== undefined && (
+          <div className="pl-11 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs border-t border-[#F5F5F5] pt-2">
+            <span className="text-[#666]">
+              Pool Credit:{" "}
+              <strong className="text-[#0F0F14]">
+                {poolBalance !== null ? `${parseFloat(poolBalance).toFixed(4)} XLM` : "Loading..."}
+              </strong>
+            </span>
+            {poolBalance !== null && (
+              <>
+                {parseFloat(poolBalance) >= parseFloat(share.amount) ? (
+                  <span className="text-[#134E4A] font-semibold">Enough ✓</span>
+                ) : (
+                  <span className="text-red-500 font-semibold">
+                    Shortfall: {(parseFloat(share.amount) - parseFloat(poolBalance)).toFixed(4)} XLM
+                  </span>
+                )}
+                {parseFloat(poolBalance) < parseFloat(share.amount) && (
+                  <button
+                    disabled={depositLoading}
+                    onClick={() => {
+                      const shortfall = parseFloat(share.amount) - parseFloat(poolBalance);
+                      onDepositPool?.(shortfall.toFixed(7));
+                    }}
+                    className={cn(
+                      "font-bold text-[#2DD4BF] hover:text-[#25BFA3] transition-colors underline disabled:opacity-50 disabled:no-underline"
+                    )}
+                  >
+                    {depositLoading ? "Depositing..." : "Deposit Shortfall"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* QR toggle — only if unpaid and has wallet address */}
         {!share.paid && share.walletAddress && (
