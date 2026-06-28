@@ -46,6 +46,9 @@ jobs:
       - name: Test with coverage gate
         run: npm run test:coverage -- --runInBand
 
+      - name: Proof link validation
+        run: npm run proof:links
+
       - name: Build
         run: npm run build
 

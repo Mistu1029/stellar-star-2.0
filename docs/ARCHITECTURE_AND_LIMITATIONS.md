@@ -21,7 +21,7 @@ SettleX uses:
 ## Known Limitations
 
 - Project is testnet-oriented; mainnet operational controls are not included.
-- README still needs one explicit phone viewport screenshot for final checklist completeness.
+- Mobile viewport screenshot proof is now included in `README.md` and `public/mobile-responsive.png`.
 - CI merge protection enforcement is a GitHub repository setting and must be enabled manually in repo settings.
 - Wallet UX depends on extension behavior and user approval flow.
 - Some screenshots in README are desktop captures; mobile screenshots should be added for evaluator clarity.

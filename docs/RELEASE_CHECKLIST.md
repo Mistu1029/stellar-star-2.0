@@ -32,6 +32,7 @@ Date: 2026-03-29
 - [x] README includes deployment proof via live Vercel URL
 - [x] README includes submission checklist evidence section
 - [x] Final docs package added under `docs/`
+- [x] Add one explicit mobile viewport screenshot (phone-sized capture) and reference it in README before final submission
 
 ## Submission Gate
 

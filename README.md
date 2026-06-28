@@ -120,6 +120,10 @@ Every payment can be traced through an explorer transaction hash, and settlement
 
 ![Stellar-star Dashboard - mobile view](https://ik.imagekit.io/ahfz0yimd/Screenshot%202026-04-28%20201155.png)
 
+### Mobile responsive proof
+
+![Stellar-star Mobile responsive screenshot](public/mobile-responsive.png)
+
 </details>
 
 <details>
@@ -260,6 +264,7 @@ SettleX employs a pool contract architecture where member balances are tracked. 
 | Demo video | [YouTube](https://youtu.be/gnUaUONmb3I) |
 | Contract details and tx proof | [Smart Contract](#-smart-contract) section |
 | UI screenshots | [Screenshots](#-screenshots) section |
+| Mobile screenshot proof | `public/mobile-responsive.png` |
 | Test output screenshot | `public/testcase.png` |
 | Release/runbook/proof docs | [Documentation](#-documentation) section |
 

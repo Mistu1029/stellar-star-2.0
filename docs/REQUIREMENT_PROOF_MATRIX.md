@@ -15,7 +15,7 @@ Date: 2026-03-29
 | README includes pool details | Complete | Pool-related behavior and proof references are documented in repo docs and historical records |
 | README includes CI/CD proof | Complete | CI badge in README and test output screenshot |
 | README includes deployment proof screenshot | Complete | Live Vercel deployment: [https://stellar-star-soumen1080s-projects.vercel.app/](https://stellar-star-soumen1080s-projects.vercel.app/) |
-| README includes mobile screenshot | Pending manual capture | Add phone viewport screenshot (e.g. `public/mobile-responsive.png`) and reference in README |
+| README includes mobile screenshot | Complete | Local mobile viewport screenshot `public/mobile-responsive.png` added and referenced in README |
 
 ## Automated Verification Summary
 
