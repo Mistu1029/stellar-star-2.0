@@ -15,17 +15,17 @@ interface PaymentStatusProps {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  building:   "Building transaction…",
-  signing:    "Waiting for wallet signature…",
-  submitting: "Submitting to Stellar network…",
-  recording:  "Recording payment on-chain…",
+  building:   "Building transaction...",
+  signing:    "Waiting for wallet signature...",
+  submitting: "Submitting to Stellar network...",
+  recording:  "Recording payment on-chain...",
 };
 
 const RECORDING_STEP_LABELS: Record<string, string> = {
-  simulating: "Simulating contract call…",
-  signing: "Preparing signed contract transaction…",
-  sending: "Sending contract transaction…",
-  confirming: "Confirming on-chain settlement…",
+  simulating: "Simulating contract call...",
+  signing: "Preparing signed contract transaction...",
+  sending: "Sending contract transaction...",
+  confirming: "Confirming on-chain settlement...",
 };
 
 export function PaymentStatus({ state, onReset, onRetryOnChain, className }: PaymentStatusProps) {
@@ -66,7 +66,7 @@ export function PaymentStatus({ state, onReset, onRetryOnChain, className }: Pay
                 </p>
                 {state.status === "recording" && (
                   <p className="text-[11px] text-[#AAA] mt-0.5">
-                    Storing settlement proof in the Soroban contract pool flow…
+                    Storing settlement proof in the Soroban contract pool flow...
                   </p>
                 )}
               </div>

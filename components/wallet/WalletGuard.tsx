@@ -41,7 +41,7 @@ export function WalletGuard({
         <div className="flex flex-col items-center gap-4">
           <Spinner size={28} className="text-[#2DD4BF]" />
           <p className="text-sm font-medium text-[#888]">
-            {isConnecting ? "Connecting wallet…" : "Checking wallet…"}
+            {isConnecting ? "Connecting wallet..." : "Checking wallet..."}
           </p>
         </div>
       </div>

@@ -13,7 +13,7 @@ function friendlyOpError(code: string): string {
     op_no_trust:             "The recipient hasn't set up a trustline for this asset.",
     op_line_full:            "The recipient's account cannot receive more of this asset.",
     op_not_authorized:       "You are not authorised to send to this account.",
-    op_malformed:            "Transaction is malformed — check the amount and addresses.",
+    op_malformed:            "Transaction is malformed - check the amount and addresses.",
   };
   return map[code] ?? `Operation failed: ${code}`;
 }

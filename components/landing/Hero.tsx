@@ -173,7 +173,7 @@ export default function Hero() {
               <span className="font-semibold text-[#0F0F14]">
                 Stellar Network
               </span>{" "}
-              — fast, transparent, and verifiable.
+              - fast, transparent, and verifiable.
             </motion.p>
 
             {/* CTA row */}
@@ -281,7 +281,7 @@ export default function Hero() {
                 <div className="overflow-hidden">
                   <p className="text-[10px] text-[#888] mb-0.5">TX Confirmed · Ledger 47,291,034</p>
                   <p className="text-xs font-mono text-[#2DD4BF] truncate">
-                    0xabc1…f324 · 300 XLM to Aman
+                    0xabc1...f324 · 300 XLM to Aman
                   </p>
                 </div>
               </motion.div>

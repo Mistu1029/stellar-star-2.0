@@ -79,7 +79,7 @@ export default function Pricing() {
           </h2>
           <p className="text-[#666] text-lg">
             Stellar-star charges zero platform fees. You only pay the tiny Stellar
-            network fee — currently less than $0.000002 per transaction.
+            network fee - currently less than $0.000002 per transaction.
           </p>
         </motion.div>
 

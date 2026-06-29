@@ -216,7 +216,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         });
 
         setPaymentState({ status: "signing" });
-        toastInfo("Waiting for wallet signature…", "Review and confirm the transaction.");
+        toastInfo("Waiting for wallet signature...", "Review and confirm the transaction.");
         const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
 
         setPaymentState({ status: "submitting" });
@@ -315,8 +315,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         toastSuccess(
           `Paid ${parseFloat(share.amount).toFixed(4)} XLM to ${share.name}`,
           onChain
-            ? `TX: ${result.hash.slice(0, 12)}… · Recorded on-chain ✓`
-            : `TX: ${result.hash.slice(0, 12)}…`,
+            ? `TX: ${result.hash.slice(0, 12)}... · Recorded on-chain (verified)`
+            : `TX: ${result.hash.slice(0, 12)}...`,
         );
 
         setTimeout(() => refreshBalance(), 3000);

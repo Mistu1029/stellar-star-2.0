@@ -35,7 +35,7 @@ export function decodeContractError(raw: string): string {
       case ContractErrorCode.AlreadyPaid:
         return "This expense was already settled on-chain. No double payment needed.";
       case ContractErrorCode.EmptyId:
-        return "Trip ID or expense ID is missing — cannot record payment.";
+        return "Trip ID or expense ID is missing - cannot record payment.";
       case ContractErrorCode.AlreadyInitialized:
         return "Contract is already initialized.";
       case ContractErrorCode.NotInitialized:
@@ -93,7 +93,7 @@ export function stroopsToXlm(stroops: bigint | string): string {
 function contractReady(caller: string): boolean {
   if (!CONTRACT_ID) {
     console.info(
-      `[StellarStar] ${caller}: CONTRACT_ID not set — skipping on-chain step. ` +
+      `[StellarStar] ${caller}: CONTRACT_ID not set - skipping on-chain step. ` +
       "Deploy the contract and add NEXT_PUBLIC_CONTRACT_ID to .env.local."
     );
     return false;

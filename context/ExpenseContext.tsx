@@ -222,7 +222,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
 
-    // Persist to Supabase — throw on failure so the caller can handle it
+    // Persist to Supabase - throw on failure so the caller can handle it
     const client = getClient();
     const { error } = await client
       .from("expenses")
@@ -299,7 +299,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const markSharePaid = useCallback(
     async (expenseId: string, memberId: string, txHash: string) => {
       const current = expenses.find((e) => e.id === expenseId);
-      if (!current) throw new Error("Expense not found in state — please refresh and try again.");
+      if (!current) throw new Error("Expense not found in state - please refresh and try again.");
 
       setExpenses((prev) => {
         const updated = prev.map((e) => {

@@ -33,7 +33,7 @@ export async function connectFreighter(): Promise<string> {
   });
 
   if (connectError) throw connectError;
-  if (!resolvedAddress) throw new Error("No wallet address returned — please try again.");
+  if (!resolvedAddress) throw new Error("No wallet address returned - please try again.");
   return resolvedAddress;
 }
 

@@ -108,7 +108,7 @@ function NetPaymentRow({
         amount:               payment.amount,
         memoText:             memo,
       });
-      toastInfo("Waiting for Freighter…", "Confirm the settlement payment.");
+      toastInfo("Waiting for Freighter...", "Confirm the settlement payment.");
       const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
       const { hash }  = await submitSignedTransaction(signedXDR);
 
@@ -192,7 +192,7 @@ function NetPaymentRow({
       {isOnChain && !done && (
         <p className="text-[10px] text-[#5a9400] pl-1 flex items-center gap-1">
           <Database size={9} />
-          Confirmed on Stellar — ledger proof recorded
+          Confirmed on Stellar - ledger proof recorded
         </p>
       )}
 

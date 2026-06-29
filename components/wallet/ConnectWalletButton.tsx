@@ -130,7 +130,7 @@ function WalletDropdown({
               <Spinner size={14} className="text-[#2DD4BF]" />
             ) : (
               <p className="text-lg font-black text-[#0F0F14]">
-                {balance ? `${formatXLM(balance)} XLM` : "—"}
+                {balance ? `${formatXLM(balance)} XLM` : "-"}
               </p>
             )}
           </div>
@@ -171,7 +171,7 @@ function WalletDropdown({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface ConnectWalletButtonProps {
-  /** Compact mode for mobile menus — shows text only, no balance */
+  /** Compact mode for mobile menus - shows text only, no balance */
   compact?: boolean;
   className?: string;
 }
@@ -361,7 +361,7 @@ export function ConnectWalletButton({
       {isConnecting ? (
         <>
           <Spinner size={15} className="text-[#0F0F14]" />
-          Connecting…
+          Connecting...
         </>
       ) : (
         <>

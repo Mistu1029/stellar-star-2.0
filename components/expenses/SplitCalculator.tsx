@@ -18,9 +18,9 @@ interface SplitCalculatorProps {
   payingShareId?: string;
   /** Disable pay buttons */
   disablePay?: boolean;
-  /** Connected wallet address — Pay button only shows on the matching row. */
+  /** Connected wallet address - Pay button only shows on the matching row. */
   connectedWalletAddress?: string | null;
-  /** Payer’s wallet address — never show Pay button for the payer, even if wallets overlap. */
+  /** Payer’s wallet address - never show Pay button for the payer, even if wallets overlap. */
   payerWalletAddress?: string;
   poolBalance?: string | null;
   depositLoading?: boolean;

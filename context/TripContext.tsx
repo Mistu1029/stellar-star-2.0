@@ -214,7 +214,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
 
-    // Persist to Supabase — throw on failure so the caller can handle it
+    // Persist to Supabase - throw on failure so the caller can handle it
     const client = getClient();
     const { error } = await client
       .from("trips")

@@ -18,7 +18,7 @@ const steps = [
     icon: Wallet,
     title: "Connect Your Wallet",
     description:
-      "Install the Freighter browser extension and click Connect. Your public key is fetched instantly — no email, no password.",
+      "Install the Freighter browser extension and click Connect. Your public key is fetched instantly - no email, no password.",
     hint: "Uses Freighter API · Non-custodial",
     color: "#2DD4BF",
   },
@@ -36,7 +36,7 @@ const steps = [
     icon: Send,
     title: "Pay via Stellar",
     description:
-      "Each person clicks Pay. Freighter pops up with transaction details — destination, amount, and memo. One confirmation and funds move in seconds.",
+      "Each person clicks Pay. Freighter pops up with transaction details - destination, amount, and memo. One confirmation and funds move in seconds.",
     hint: "~5 second finality on Stellar",
     color: "#2DD4BF",
   },
@@ -99,9 +99,9 @@ const MockTerminal = () => (
         <span className="text-[#2DD4BF]">await</span> submit(signedXDR);
       </div>
       <div className="mt-3 pt-3 border-t border-white/5 text-[#2DD4BF]">
-        ✓ TX Hash: 4f3a...c8e2
+        TX Hash: 4f3a...c8e2
       </div>
-      <div className="text-[#2DD4BF]">✓ Ledger: 47,291,034 · Successful</div>
+      <div className="text-[#2DD4BF]">Ledger: 47,291,034 · Successful</div>
     </div>
   </div>
 );
@@ -143,7 +143,7 @@ export default function HowItWorks() {
                 </span>
               </h2>
               <p className="text-[#666] text-lg leading-relaxed">
-                From wallet connect to on-chain confirmation — the entire flow
+                From wallet connect to on-chain confirmation - the entire flow
                 takes under a minute.
               </p>
             </motion.div>
@@ -224,7 +224,7 @@ export default function HowItWorks() {
                   "Stellar SDK",
                   "Freighter Sign",
                   "Horizon",
-                  "Ledger ✓",
+                  "Ledger Success",
                 ].map((step, i, arr) => (
                   <React.Fragment key={step}>
                     <div className="bg-white border border-[#E5E5E5] rounded-xl px-3 py-1.5 text-xs font-medium text-[#0F0F14] whitespace-nowrap">
@@ -244,7 +244,7 @@ export default function HowItWorks() {
                 { label: "Avg TX Fee", value: "0.00001 XLM", sub: "~$0.000002" },
                 { label: "Settlement Time", value: "~5 seconds", sub: "Stellar Network" },
                 { label: "TX Precision", value: "7 decimals", sub: "Native XLM" },
-                { label: "Network", value: "Testnet", sub: "→ Mainnet ready" },
+                { label: "Network", value: "Testnet", sub: "-> Mainnet ready" },
               ].map((stat) => (
                 <div
                   key={stat.label}

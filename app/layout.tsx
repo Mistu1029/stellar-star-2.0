@@ -27,11 +27,11 @@ const metadataBase = (() => {
 export const metadata: Metadata = {
   metadataBase,
   title: {
-    default: "Stellar-star — Split Bills on the Stellar Blockchain",
+    default: "Stellar-star - Split Bills on the Stellar Blockchain",
     template: "%s | Stellar-star",
   },
   description:
-    "Stellar-star is a decentralized bill-splitting app built on the Stellar blockchain. Split expenses, pay instantly with XLM, track with QR codes — all trustless, all transparent.",
+    "Stellar-star is a decentralized bill-splitting app built on the Stellar blockchain. Split expenses, pay instantly with XLM, track with QR codes - all trustless, all transparent.",
   keywords: [
     "Stellar",
     "blockchain",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "/",
     siteName: "Stellar-star",
-    title: "Stellar-star — Split Bills on the Stellar Blockchain",
+    title: "Stellar-star - Split Bills on the Stellar Blockchain",
     description:
       "Decentralized bill-splitting powered by Stellar. Split instantly, pay transparently.",
     images: [
@@ -58,13 +58,13 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Stellar-star — Split Bills on Stellar",
+        alt: "Stellar-star - Split Bills on Stellar",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Stellar-star — Split Bills on the Stellar Blockchain",
+    title: "Stellar-star - Split Bills on the Stellar Blockchain",
     description: "Decentralized bill-splitting powered by Stellar.",
     images: ["/og-image.png"],
   },

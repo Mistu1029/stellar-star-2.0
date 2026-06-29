@@ -67,7 +67,7 @@ describe("cn", () => {
     expect(cn("foo", false && "bar", undefined, null as unknown as string)).toBe("foo");
   });
 
-  it("handles Tailwind conflicts — last wins", () => {
+  it("handles Tailwind conflicts - last wins", () => {
     // twMerge should resolve p-4 vs p-2 in favour of the last one
     const result = cn("p-4", "p-2");
     expect(result).toBe("p-2");

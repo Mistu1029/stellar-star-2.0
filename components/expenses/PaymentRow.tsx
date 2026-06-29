@@ -21,10 +21,10 @@ interface PaymentRowProps {
   onPay?: (share: SplitShare) => void;
   /** When true, show spinner on Pay button (payment in-flight for this share). */
   isPaying?: boolean;
-  /** Connected wallet — Pay button is only shown when this matches share.walletAddress.
+  /** Connected wallet - Pay button is only shown when this matches share.walletAddress.
    *  If undefined/null, falls back to the old behaviour (show for all). */
   connectedWalletAddress?: string | null;
-  /** Payer's wallet address — guard against showing Pay for the payer row. */
+  /** Payer's wallet address - guard against showing Pay for the payer row. */
   payerWalletAddress?: string;
   poolBalance?: string | null;
   depositLoading?: boolean;
@@ -51,7 +51,7 @@ export function PaymentRow({
     : null;
   const memo = `StellarStar|${expenseTitle}|${share.name}`.slice(0, 28);
 
-  // The payer NEVER owes anything — guard even if wallets accidentally overlap.
+  // The payer NEVER owes anything - guard even if wallets accidentally overlap.
   const isPayerRow =
     !!payerWalletAddress &&
     !!share.walletAddress &&
@@ -129,7 +129,7 @@ export function PaymentRow({
 
             {share.paid ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#2DD4BF]/30 text-[#134E4A] rounded-full">
-                ✓ Paid
+                Paid
               </span>
             ) : isMyRow ? (
               <PayButton
@@ -160,7 +160,7 @@ export function PaymentRow({
             {poolBalance !== null && (
               <>
                 {parseFloat(poolBalance) >= parseFloat(share.amount) ? (
-                  <span className="text-[#134E4A] font-semibold">Enough ✓</span>
+                  <span className="text-[#134E4A] font-semibold">Enough</span>
                 ) : (
                   <span className="text-red-500 font-semibold">
                     Shortfall: {(parseFloat(share.amount) - parseFloat(poolBalance)).toFixed(4)} XLM
@@ -185,7 +185,7 @@ export function PaymentRow({
           </div>
         )}
 
-        {/* QR toggle — only if unpaid and has wallet address */}
+        {/* QR toggle - only if unpaid and has wallet address */}
         {!share.paid && share.walletAddress && (
           <div className="pl-11">
             <QRToggle

@@ -45,7 +45,7 @@ export function PayButton({
       ) : (
         <Zap size={size === "sm" ? 11 : 14} className="fill-[#2DD4BF]" />
       )}
-      {isLoading ? "Paying…" : `Pay ${xlm} XLM`}
+      {isLoading ? "Paying..." : `Pay ${xlm} XLM`}
     </button>
   );
 }

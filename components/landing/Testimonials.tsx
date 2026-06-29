@@ -25,7 +25,7 @@ const testimonials = [
     avatarColor: "#2DD4BF",
     role: "DeFi Enthusiast",
     stars: 5,
-    text: "Used Stellar-star for our group trip to Goa. 6 people, 22 expenses — it auto-settled everything into 3 transactions. The Stellar fees were basically zero. Can't go back to Splitwise after this.",
+    text: "Used Stellar-star for our group trip to Goa. 6 people, 22 expenses - it auto-settled everything into 3 transactions. The Stellar fees were basically zero. Can't go back to Splitwise after this.",
     highlight: "auto-settled everything into 3 transactions",
   },
   {
@@ -36,7 +36,7 @@ const testimonials = [
     avatarColor: "#2DD4BF",
     role: "Blockchain Engineer",
     stars: 5,
-    text: "The on-chain memo system is clever. Every receipt permanently lives on the Stellar ledger — I clicked the TX hash to verify it myself. For crypto-native users, this is the bill-splitting app.",
+    text: "The on-chain memo system is clever. Every receipt permanently lives on the Stellar ledger - I clicked the TX hash to verify it myself. For crypto-native users, this is the bill-splitting app.",
     highlight: "every receipt permanently lives on the Stellar ledger",
   },
   {
@@ -133,7 +133,7 @@ export default function Testimonials() {
             </span>
           </h2>
           <p className="text-[#666] text-lg">
-            From group trips to shared apartments — see what our early community
+            From group trips to shared apartments - see what our early community
             is saying about Stellar-star.
           </p>
         </motion.div>

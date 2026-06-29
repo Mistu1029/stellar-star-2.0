@@ -259,7 +259,7 @@ export class StellarWalletsKit {
         background:   "#F0F0F0",
         color:        "#999",
       } as Partial<CSSStyleDeclaration>);
-      badge.textContent = "Checking…";
+      badge.textContent = "Checking...";
 
       wallet.isInstalled().then((available) => {
         if (available) {

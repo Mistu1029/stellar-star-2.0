@@ -145,7 +145,7 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
                 />
                 <div className="flex flex-col gap-0.5">
                   <Input
-                    placeholder="G… Stellar address *"
+                    placeholder="G... Stellar address *"
                     value={member.walletAddress ?? ""}
                     onChange={(e) =>
                       updateMember(member.id, "walletAddress", e.target.value)
@@ -153,7 +153,7 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
                     error={errors[`member_addr_${i}`]}
                   />
                   {!errors[`member_addr_${i}`] && (
-                    <p className="text-[10px] text-[#AAA] px-1">Required — used to send XLM payment</p>
+                    <p className="text-[10px] text-[#AAA] px-1">Required - used to send XLM payment</p>
                   )}
                 </div>
               </div>

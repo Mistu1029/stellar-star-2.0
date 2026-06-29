@@ -23,8 +23,8 @@ export function TransactionHash({ hash, className, compact = false }: Transactio
   };
 
   const display = compact
-    ? `${hash.slice(0, 8)}…${hash.slice(-4)}`
-    : `${hash.slice(0, 16)}…${hash.slice(-6)}`;
+    ? `${hash.slice(0, 8)}...${hash.slice(-4)}`
+    : `${hash.slice(0, 16)}...${hash.slice(-6)}`;
 
   return (
     <div

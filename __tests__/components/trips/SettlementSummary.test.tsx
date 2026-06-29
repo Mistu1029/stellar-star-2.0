@@ -114,7 +114,7 @@ describe("SettlementSummary", () => {
 
     expect(screen.getByText("On-chain")).toBeTruthy();
     expect(screen.getByText("Pay 3.5000 XLM")).toBeTruthy();
-    expect(screen.queryByText("Confirmed on Stellar — ledger proof recorded")).toBeTruthy();
+    expect(screen.queryByText("Confirmed on Stellar - ledger proof recorded")).toBeTruthy();
 
     // The second payment row should still show a pay button because it has no exact matching event.
     expect(screen.getByText("Pay 3.5000 XLM")).toBeTruthy();

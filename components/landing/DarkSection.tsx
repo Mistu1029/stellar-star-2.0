@@ -32,7 +32,7 @@ const highlights = [
     icon: Globe,
     title: "Borderless Payments",
     description:
-      "Anyone with a Freighter wallet and XLM can participate — no bank account, no geography limits.",
+      "Anyone with a Freighter wallet and XLM can participate - no bank account, no geography limits.",
   },
   {
     icon: Lock,
@@ -65,7 +65,7 @@ const MockExplorer = () => (
 
       {/* Fields */}
       {[
-        { label: "Status", value: "✓ Success", color: "#2DD4BF" },
+        { label: "Status", value: "Success", color: "#2DD4BF" },
         { label: "Ledger", value: "47,291,034" },
         { label: "Amount", value: "300.0000000 XLM" },
         { label: "Memo", value: "StellarStar|Dinner|Aman" },
@@ -148,7 +148,7 @@ export default function DarkSection() {
               className="text-[#888] text-lg leading-relaxed mb-10 max-w-xl"
             >
               Every transaction on Stellar-star is permanently recorded on the Stellar
-              ledger. No central server. No hidden fees. No trust required — just
+              ledger. No central server. No hidden fees. No trust required - just
               math and cryptography.
             </motion.p>
 

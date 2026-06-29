@@ -135,7 +135,7 @@ export default function Features() {
             </span>
           </h2>
           <p className="text-[#666] text-lg leading-relaxed">
-            Every feature designed around the actual pain of splitting bills — with
+            Every feature designed around the actual pain of splitting bills - with
             the transparency and security of Stellar blockchain.
           </p>
         </motion.div>

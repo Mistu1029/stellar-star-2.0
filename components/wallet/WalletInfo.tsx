@@ -9,7 +9,7 @@ import { STELLAR_EXPLORER } from "@/lib/utils/constants";
 import { cn } from "@/lib/utils";
 
 /**
- * Full wallet info panel — intended for the dashboard sidebar or page header.
+ * Full wallet info panel - intended for the dashboard sidebar or page header.
  * Shows: address, network, balance, copy/explorer/refresh/disconnect actions.
  */
 export function WalletInfo({ className }: { className?: string }) {
@@ -110,7 +110,7 @@ export function WalletInfo({ className }: { className?: string }) {
                 <Spinner size={16} className="text-[#2DD4BF]" />
               ) : (
                 <p className="text-2xl font-black text-[#0F0F14]">
-                  {balance ? `${formatXLM(balance)}` : "—"}{" "}
+                  {balance ? `${formatXLM(balance)}` : "-"}{" "}
                   <span className="text-sm font-semibold text-[#2DD4BF]">XLM</span>
                 </p>
               )}

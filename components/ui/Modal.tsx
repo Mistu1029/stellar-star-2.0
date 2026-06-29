@@ -77,7 +77,7 @@ export function Modal({
             aria-hidden="true"
           />
 
-          {/* Panel — bottom-sheet on mobile, centred on sm+ */}
+          {/* Panel - bottom-sheet on mobile, centred on sm+ */}
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 pointer-events-none">
             <motion.div
               key="panel"
@@ -101,7 +101,7 @@ export function Modal({
               aria-modal="true"
               aria-labelledby={title ? "modal-title" : undefined}
             >
-              {/* Drag handle — mobile only */}
+              {/* Drag handle - mobile only */}
               <div className="flex justify-center pt-3 sm:hidden">
                 <div className="w-8 h-1 rounded-full bg-[#D0D0D0]" />
               </div>
@@ -132,7 +132,7 @@ export function Modal({
                 </div>
               )}
 
-              {/* No header — floating close button */}
+              {/* No header - floating close button */}
               {!title && !description && (
                 <button
                   onClick={onClose}

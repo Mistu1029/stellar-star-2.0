@@ -69,7 +69,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       : null;
 
     if (!savedKey) {
-      // No saved key — nothing to restore, mark hydration done immediately
+      // No saved key - nothing to restore, mark hydration done immediately
       setIsHydrated(true);
       return;
     }
@@ -84,14 +84,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem(LS_PUBLIC_KEY);
         localStorage.removeItem("StellarStar:walletId");
       } else {
-        // Restore silently — do not re-prompt the user
+        // Restore silently - do not re-prompt the user
         getWalletsKit().setWallet(walletId);
         setPublicKey(savedKey);
         setSelectedWalletId(walletId);
         fetchBalance(savedKey);
         hydrateNetwork();
       }
-      // Either way, hydration check is done — allow WalletGuard to render
+      // Either way, hydration check is done - allow WalletGuard to render
       setIsHydrated(true);
     });
   }, [fetchBalance, hydrateNetwork]);
@@ -152,7 +152,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("StellarStar:walletId", selectedId);
       toastSuccess(
         "Wallet connected",
-        `${resolvedAddress.slice(0, 6)}…${resolvedAddress.slice(-4)} on ${net === "PUBLIC" ? "Mainnet" : "Testnet"}`
+        `${resolvedAddress.slice(0, 6)}...${resolvedAddress.slice(-4)} on ${net === "PUBLIC" ? "Mainnet" : "Testnet"}`
       );
 
       fetchBalance(resolvedAddress);

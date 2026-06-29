@@ -38,16 +38,16 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # ── Step 1: Build ─────────────────────────────────────────────────────────────
-echo "▸ Building contract (release)…"
+echo "▸ Building contract (release)..."
 stellar contract build \
   --manifest-path contract/Cargo.toml \
   --package settlex-contract \
   --optimize
-echo "  ✓ Build succeeded: $WASM_PATH"
+echo "  [OK] Build succeeded: $WASM_PATH"
 echo ""
 
 # ── Step 2: Deploy ────────────────────────────────────────────────────────────
-echo "▸ Deploying to testnet…"
+echo "▸ Deploying to testnet..."
 CONTRACT_ID=$(stellar contract deploy \
   --wasm      "$WASM_PATH" \
   --source-account "$ACCOUNT" \

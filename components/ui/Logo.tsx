@@ -7,8 +7,8 @@ interface StellarStarLogoProps {
   /** Show only the icon mark without the wordmark text */
   iconOnly?: boolean;
   /**
-   * "light" — dark wordmark for light backgrounds (default)
-   * "dark"  — white wordmark for dark backgrounds
+   * "light" - dark wordmark for light backgrounds (default)
+   * "dark"  - white wordmark for dark backgrounds
    */
   variant?: "light" | "dark";
   className?: string;
@@ -22,7 +22,7 @@ const SIZE_MAP = {
 };
 
 /**
- * Stellar Star brand logo — inline SVG so it works without any image requests,
+ * Stellar Star brand logo - inline SVG so it works without any image requests,
  * renders crisp at every size, and respects the app's colour tokens.
  */
 export function StellarStarLogo({
@@ -50,13 +50,13 @@ export function StellarStarLogo({
         {/* Background */}
         <rect width="512" height="512" rx="110" fill="#0F0F14" />
 
-        {/* Star — the Stellar Star symbol */}
+        {/* Star - the Stellar Star symbol */}
         <path
           d="M 256 72 L 306 196 L 440 196 L 330 280 L 370 408 L 256 328 L 142 408 L 182 280 L 72 196 L 206 196 Z"
           fill="#2DD4BF"
         />
 
-        {/* Subtle glow — accent */}
+        {/* Subtle glow - accent */}
         <circle cx="256" cy="256" r="40" fill="#2DD4BF" opacity="0.15" />
       </svg>
 
