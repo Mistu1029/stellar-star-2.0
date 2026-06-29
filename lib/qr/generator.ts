@@ -25,6 +25,12 @@ export function buildQRPaymentURI({ destination, amount, memo }: QRPaymentData):
     amount,
   });
   if (memo) {
+    // TODO: Implement UTF-8 byte-aware truncation to 28 bytes to prevent wallet rejections/crashes:
+    // 1. Convert the memo to raw UTF-8 bytes: const bytes = new TextEncoder().encode(memo);
+    // 2. If bytes.length > 28, slice to 28: const sliced = bytes.slice(0, 28);
+    // 3. Decode back: const decoded = new TextDecoder("utf-8").decode(sliced);
+    // 4. Handle cut-off multi-byte sequences at the end of the string to avoid invalid UTF-8 (e.g. by dropping the incomplete character at the end).
+    // 5. Use the safely truncated memo instead of the raw memo.
     params.set("memo", memo);
     params.set("memo_type", "MEMO_TEXT");
   }
