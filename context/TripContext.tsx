@@ -152,9 +152,17 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    if (isLoading || !supabase) return;
+    if (isLoading) return;
 
-    const channel = supabase
+    let client;
+    try {
+      client = getClient();
+    } catch {
+      return;
+    }
+    if (!client) return;
+
+    const channel = client
       .channel("trips-changes")
       .on(
         "postgres_changes",
@@ -203,7 +211,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [isLoading, saveTripsToCache]);
+  }, [isLoading, getClient, publicKey, saveTripsToCache]);
 
   const addTrip = useCallback(async (trip: Trip) => {
     if (!publicKey) throw new Error("Wallet not connected");
