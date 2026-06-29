@@ -45,6 +45,11 @@ describe("Wallet Cache Isolation (Issue #17)", () => {
   });
 
   it("isolates cached trips and expenses per connected wallet", async () => {
+    const mockChannel = {
+      on: jest.fn().mockReturnThis(),
+      subscribe: jest.fn().mockReturnThis(),
+      unsubscribe: jest.fn().mockReturnThis(),
+    };
     const mockClient = {
       from: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
@@ -52,6 +57,7 @@ describe("Wallet Cache Isolation (Issue #17)", () => {
         // Return database error to force loading from cache
         return Promise.resolve({ data: null, error: { message: "Network offline" } });
       }),
+      channel: jest.fn(() => mockChannel),
     };
 
     const verifyClientModule = jest.requireMock("@/lib/supabase/client") as { createAuthenticatedClient: jest.Mock };

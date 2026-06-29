@@ -160,9 +160,17 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   }, [getClient, loadExpensesFromCache, publicKey, saveExpensesToCache]);
 
   useEffect(() => {
-    if (isLoading || !supabase) return;
+    if (isLoading) return;
 
-    const channel = supabase
+    let client;
+    try {
+      client = getClient();
+    } catch {
+      return;
+    }
+    if (!client) return;
+
+    const channel = client
       .channel("expenses-changes")
       .on(
         "postgres_changes",
@@ -172,7 +180,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           setExpenses((prev) => {
             if (prev.some((e) => e.id === newExpense.id)) return prev;
             const updated = [newExpense, ...prev];
-        saveExpensesToCache(updated);
+            saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -186,7 +194,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
             const updated = prev.map((e) =>
               e.id === updatedExpense.id ? updatedExpense : e
             );
-        saveExpensesToCache(updated);
+            saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -199,7 +207,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
           if (!deletedId) return;
           setExpenses((prev) => {
             const updated = prev.filter((e) => e.id !== deletedId);
-        saveExpensesToCache(updated);
+            saveExpensesToCache(updated);
             return updated;
           });
         }
@@ -211,7 +219,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [isLoading, saveExpensesToCache]);
+  }, [isLoading, getClient, publicKey, saveExpensesToCache]);
 
   const addExpense = useCallback(async (expense: Expense) => {
     if (!publicKey) throw new Error("Wallet not connected");
