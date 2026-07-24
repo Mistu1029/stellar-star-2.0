@@ -1,5 +1,5 @@
 -- ============================================================================
--- SettleX - Supabase Database Setup
+-- Stellar-star - Supabase Database Setup
 -- ============================================================================
 -- ✅ SAFE TO RUN MULTIPLE TIMES - This script is fully idempotent
 -- It will create new objects or update existing ones without errors

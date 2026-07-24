@@ -1,4 +1,4 @@
-# SettleX Production Runbook
+# Stellar-star Production Runbook
 
 ## 1. Prerequisites
 
@@ -92,7 +92,7 @@ If production-like issue occurs:
 
 ## 8. Settlement Pool Credit Model
 
-To prevent recording settlements without a valid proof on-chain, the SettleX contract interfaces with a `SettlementPoolContract`.
+To prevent recording settlements without a valid proof on-chain, the Stellar-star contract interfaces with a `SettlementPoolContract`.
 Before a payment record is accepted:
 1. The user's share amount is checked against their balance in the pool contract.
 2. If the user's pool balance is insufficient (shortfall > 0), they must deposit credits first using the "Deposit Shortfall" flow in their row. This invokes `deposit(member, amount)` on the pool contract with their signature.

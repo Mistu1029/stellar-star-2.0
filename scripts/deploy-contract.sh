@@ -2,7 +2,7 @@
 # =============================================================================
 # deploy-contract.sh
 #
-# Builds and deploys the SettleX Soroban settlement contract to Stellar testnet.
+# Builds and deploys the Stellar-star Soroban settlement contract to Stellar testnet.
 #
 # Prerequisites:
 #   - Rust toolchain with wasm32v1-none target
@@ -32,7 +32,7 @@ WASM_PATH="contract/target/wasm32v1-none/release/settlex_contract.wasm"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  SettleX Contract Deployment"
+echo "  Stellar-star Contract Deployment"
 echo "  Network : Stellar Testnet"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -73,13 +73,13 @@ POOL_CONTRACT_ID=$(stellar contract deploy \
 echo "  [OK] Settlement Pool contract deployed: $POOL_CONTRACT_ID"
 echo ""
 
-echo "▸ Deploying SettleX Settlement contract to testnet..."
+echo "▸ Deploying Stellar-star Settlement contract to testnet..."
 SETTLEMENT_CONTRACT_ID=$(stellar contract deploy \
   --wasm      "$WASM_PATH" \
   --source-account "$ACCOUNT" \
   --network   testnet \
   --inclusion-fee 1000000)
-echo "  [OK] SettleX Settlement contract deployed: $SETTLEMENT_CONTRACT_ID"
+echo "  [OK] Stellar-star Settlement contract deployed: $SETTLEMENT_CONTRACT_ID"
 echo ""
 
 # ── Step 4: Initialize ────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ stellar contract invoke \
 echo "  [OK] Pool contract initialized."
 echo ""
 
-echo "▸ Initializing SettleX Settlement contract reference..."
+echo "▸ Initializing Stellar-star Settlement contract reference..."
 stellar contract invoke \
   --id "$SETTLEMENT_CONTRACT_ID" \
   --source-account "$ACCOUNT" \

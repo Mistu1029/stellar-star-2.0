@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Playwright configuration for SettleX end-to-end tests.
+ * Playwright configuration for Stellar-star end-to-end tests.
  *
  * Run locally:
  *   npx playwright test          – headless (all browsers)

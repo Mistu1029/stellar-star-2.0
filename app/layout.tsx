@@ -14,7 +14,7 @@ const poppins = Poppins({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://settle-x-pi.vercel.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://stellar-star-five.vercel.app";
 
 const metadataBase = (() => {
   try {

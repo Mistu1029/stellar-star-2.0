@@ -234,7 +234,7 @@ is_paid(expense_id, member)
 
 ### 💰 Settlement Pool Contract
 
-SettleX employs a pool contract architecture where member balances are tracked. When recording a payment on-chain, the settlement contract calls the pool contract to withdraw the member's share amount:
+Stellar-star employs a pool contract architecture where member balances are tracked. When recording a payment on-chain, the settlement contract calls the pool contract to withdraw the member's share amount:
 - **`deposit(member, amount)`**: Allows any member to deposit mock pool credits for themselves (requires member's signature).
 - **`withdraw(from, amount)`**: Withdraws credit from a member (requires member's signature).
 - **`balance_of(member)`**: Returns the current mock pool credit balance for a member.
@@ -260,7 +260,7 @@ SettleX employs a pool contract architecture where member balances are tracked. 
 | Requirement | Evidence |
 |-------------|----------|
 | Public repository | [GitHub Repo](https://github.com/Soumen1080/stellar-star) |
-| Live demo | [stellar-star-soumen1080s-projects.vercel.app](https://stellar-star-soumen1080s-projects.vercel.app/) |
+| Live demo | [stellar-star-five.vercel.app](https://stellar-star-five.vercel.app/) |
 | Demo video | [YouTube](https://youtu.be/gnUaUONmb3I) |
 | Contract details and tx proof | [Smart Contract](#-smart-contract) section |
 | UI screenshots | [Screenshots](#-screenshots) section |
@@ -395,10 +395,10 @@ bash scripts/deploy-contract.sh <stellar-cli-account-alias-or-secret>
 **Example:**
 
 ```bash
-bash scripts/deploy-contract.sh settlex-deployer
+bash scripts/deploy-contract.sh stellar-star-deployer
 ```
 
-The script builds, deploys, and cross-initializes both the **SettleX Settlement** contract and the **Settlement Pool** contract on testnet automatically.
+The script builds, deploys, and cross-initializes both the **Stellar-star Settlement** contract and the **Settlement Pool** contract on testnet automatically.
 
 **After deployment**, update:
 - `NEXT_PUBLIC_CONTRACT_ID` with the printed settlement contract ID in `.env.local`.

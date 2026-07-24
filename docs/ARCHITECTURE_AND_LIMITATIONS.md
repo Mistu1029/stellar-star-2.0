@@ -2,7 +2,7 @@
 
 ## Architecture Summary
 
-SettleX uses:
+Stellar-star uses:
 
 - Next.js + TypeScript frontend
 - Supabase for app data and realtime sync
