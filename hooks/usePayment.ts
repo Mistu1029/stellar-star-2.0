@@ -133,7 +133,6 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       });
     }
     // Only run once per (publicKey, expenseId) combination — intentional deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicKey, expenseId]);
 
   // ---------------------------------------------------------------------------
