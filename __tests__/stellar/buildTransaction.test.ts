@@ -1,4 +1,4 @@
-import { buildPaymentTransaction } from "@/lib/stellar/buildTransaction";
+import { buildPaymentTransaction, trimToMemoBytes } from "@/lib/stellar/buildTransaction";
 import { MEMO_MAX_BYTES, MEMO_PREFIX } from "@/lib/utils/constants";
 
 const sourcePublicKey = "GCUOC6KXBSOHRIMBWAHOOHLNJVHJGDPVMCMRXDKKUYQ4AUO5PNX2WYVF";
@@ -60,5 +60,41 @@ describe("buildPaymentTransaction", () => {
         amount: "2",
       }),
     ).rejects.toThrow("Failed to load account from Horizon");
+  });
+});
+
+describe("trimToMemoBytes", () => {
+  it("leaves short ASCII strings unchanged", () => {
+    const text = "Hello World";
+    expect(trimToMemoBytes(text, 28)).toBe(text);
+  });
+
+  it("truncates long ASCII strings to exactly 28 bytes", () => {
+    const text = "12345678901234567890123456789012345";
+    const truncated = trimToMemoBytes(text, 28);
+    expect(truncated).toBe("1234567890123456789012345678");
+    expect(new TextEncoder().encode(truncated).length).toBe(28);
+  });
+
+  it("avoids splitting surrogate pairs (e.g. 🍔 emoji) at the boundary", () => {
+    // 🍔 is 4 bytes.
+    // "1234567890123456789012345" is 25 bytes.
+    // If we append 🍔 (4 bytes), total is 29 bytes.
+    // Slicing at 28 bytes would split the surrogate pair of 🍔 in half.
+    // trimToMemoBytes should drop the partial surrogate pair, returning only 25 bytes.
+    const text = "1234567890123456789012345🍔";
+    const truncated = trimToMemoBytes(text, 28);
+    expect(truncated).toBe("1234567890123456789012345");
+    expect(new TextEncoder().encode(truncated).length).toBe(25);
+  });
+
+  it("includes the multi-byte character if it fits exactly within the boundary", () => {
+    // 🍔 is 4 bytes.
+    // "123456789012345678901234" is 24 bytes.
+    // Total: 28 bytes. It should include the emoji.
+    const text = "123456789012345678901234🍔";
+    const truncated = trimToMemoBytes(text, 28);
+    expect(truncated).toBe(text);
+    expect(new TextEncoder().encode(truncated).length).toBe(28);
   });
 });

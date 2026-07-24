@@ -29,7 +29,7 @@ export interface BuildTxResult {
   memo: string;
 }
 
-function trimToMemoBytes(text: string, maxBytes: number = MEMO_MAX_BYTES): string {
+export function trimToMemoBytes(text: string, maxBytes: number = MEMO_MAX_BYTES): string {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(text);
   if (bytes.length <= maxBytes) return text;
@@ -39,7 +39,14 @@ function trimToMemoBytes(text: string, maxBytes: number = MEMO_MAX_BYTES): strin
     if (encoder.encode(text.slice(0, mid)).length <= maxBytes) lo = mid;
     else hi = mid - 1;
   }
-  return text.slice(0, lo);
+  let result = text.slice(0, lo);
+  if (result.length > 0) {
+    const lastCharCode = result.charCodeAt(result.length - 1);
+    if (lastCharCode >= 0xD800 && lastCharCode <= 0xDBFF) {
+      result = result.slice(0, -1);
+    }
+  }
+  return result;
 }
 
 export async function buildPaymentTransaction({

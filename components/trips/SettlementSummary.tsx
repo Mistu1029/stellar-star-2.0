@@ -8,7 +8,7 @@ import type { Trip } from "@/types/trip";
 import type { ContractPaymentEvent } from "@/types/contract";
 import type { NetPayment, RawDebt } from "@/lib/settlement/netBalance";
 import { computeNetPayments } from "@/lib/settlement/netBalance";
-import { buildPaymentTransaction } from "@/lib/stellar/buildTransaction";
+import { buildPaymentTransaction, trimToMemoBytes } from "@/lib/stellar/buildTransaction";
 import { submitSignedTransaction } from "@/lib/stellar/submitTransaction";
 import { signXDR } from "@/lib/freighter";
 import { useWallet } from "@/hooks/useWallet";
@@ -101,7 +101,7 @@ function NetPaymentRow({
     if (!publicKey || !payment.toWallet) return;
     try {
       setRowState({ status: "paying" });
-      const memo = `StellarStar|${tripName}`.slice(0, 28);
+      const memo = trimToMemoBytes(`StellarStar|${tripName}`, 28);
       const { xdr } = await buildPaymentTransaction({
         sourcePublicKey:      publicKey,
         destinationPublicKey: payment.toWallet,

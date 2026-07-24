@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { PayButton } from "@/components/payment/PayButton";
 import { QRToggle } from "@/components/payment/QRCodeDisplay";
 import { ReceiptModal } from "@/components/expenses/ReceiptModal";
+import { trimToMemoBytes } from "@/lib/stellar/buildTransaction";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ export function PaymentRow({
   const explorerUrl = share.walletAddress
     ? `${STELLAR_EXPLORER}/account/${share.walletAddress}`
     : null;
-  const memo = `StellarStar|${expenseTitle}|${share.name}`.slice(0, 28);
+  const memo = trimToMemoBytes(`StellarStar|${expenseTitle}|${share.name}`, 28);
 
   // The payer NEVER owes anything - guard even if wallets accidentally overlap.
   const isPayerRow =

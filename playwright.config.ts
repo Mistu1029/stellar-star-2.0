@@ -61,7 +61,7 @@ export default defineConfig({
 
   /* Start the Next.js dev server before running tests in CI */
   webServer: {
-    command: "npm.cmd run dev",
+    command: "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
