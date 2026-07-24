@@ -1,4 +1,4 @@
-# SettleX Release Checklist
+# Stellar-star Release Checklist
 
 Date: 2026-03-29
 

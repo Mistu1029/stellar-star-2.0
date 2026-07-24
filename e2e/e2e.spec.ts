@@ -1,5 +1,5 @@
 /**
- * SettleX – Playwright End-to-End Tests
+ * Stellar-star – Playwright End-to-End Tests
  *
  * Coverage:
  *  1. Landing page – hero headline, key nav links, CTA visible
