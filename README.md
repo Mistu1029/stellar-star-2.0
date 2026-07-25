@@ -355,6 +355,7 @@ npm run test:coverage
 - Run `npm test -- --runInBand` to see the latest total suites/tests after any new test cases are added.
 - Run `npm run lint`, `npx tsc --noEmit`, and `npm run build` for release checks.
 - Duplicate wallet address validation (trip and expense forms) is covered by `__tests__/split/calculator.test.ts`, `__tests__/hooks/useExpenseFormValidation.test.ts`, and `__tests__/components/trips/TripFormDuplicateWallet.test.tsx`.
+- Pending on-chain retry persistence (localStorage, wallet-scoped, survives refresh) is covered by `__tests__/utils/pendingOnChain.test.ts` and `__tests__/payment/usePayment.retry-persistence.test.tsx`.
 
 **For Rust contract checks:**
 
