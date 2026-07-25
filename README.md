@@ -90,6 +90,7 @@ Every payment can be traced through an explorer transaction hash, and settlement
 | Trip net-balance optimization | ✅ Live |
 | Realtime sync (Supabase + contract events) | ✅ Live |
 | Responsive mobile-first UI | ✅ Live |
+| Duplicate wallet address validation (trip and expense forms) | ✅ Live |
 
 ---
 
@@ -353,6 +354,7 @@ npm run test:coverage
 **Current status in this workspace:**
 - Run `npm test -- --runInBand` to see the latest total suites/tests after any new test cases are added.
 - Run `npm run lint`, `npx tsc --noEmit`, and `npm run build` for release checks.
+- Duplicate wallet address validation (trip and expense forms) is covered by `__tests__/split/calculator.test.ts`, `__tests__/hooks/useExpenseFormValidation.test.ts`, and `__tests__/components/trips/TripFormDuplicateWallet.test.tsx`.
 
 **For Rust contract checks:**
 
