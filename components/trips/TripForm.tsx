@@ -5,7 +5,7 @@ import { Plus, Trash2, UserPlus } from "lucide-react";
 import type { Member } from "@/types/expense";
 import type { TripFormData } from "@/types/trip";
 import { Input } from "@/components/ui/Input";
-import { isValidStellarAddress } from "@/lib/split/calculator";
+import { findDuplicateWalletErrors, isValidStellarAddress } from "@/lib/split/calculator";
 import { cn } from "@/lib/utils";
 
 interface TripFormProps {
@@ -69,9 +69,6 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
     const namedMembers = members.filter((m) => m.name.trim());
     if (namedMembers.length < 2) errs.members = "Add at least 2 members";
 
-    // Track seen addresses for duplicate detection (case-insensitive).
-    const seenAddresses = new Map<string, number>(); // normalised address → first-seen index
-
     members.forEach((m, i) => {
       if (!m.name.trim()) return;
 
@@ -80,22 +77,14 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
         errs[`member_addr_${i}`] = "Stellar address is required.";
       } else if (!isValidStellarAddress(raw)) {
         errs[`member_addr_${i}`] = "Invalid Stellar address (must start with G, 56 chars).";
-      } else {
-        // Address is syntactically valid — check for duplicates.
-        const normalised = raw.toUpperCase();
-        if (seenAddresses.has(normalised)) {
-          const firstIdx = seenAddresses.get(normalised)!;
-          errs[`member_addr_${i}`] =
-            `Duplicate wallet address — already used by member ${firstIdx + 1}.`;
-          // Also flag the first member if not already errored.
-          if (!errs[`member_addr_${firstIdx}`]) {
-            errs[`member_addr_${firstIdx}`] =
-              `Duplicate wallet address — also used by member ${i + 1}.`;
-          }
-        } else {
-          seenAddresses.set(normalised, i);
-        }
       }
+    });
+
+    const duplicateErrors = findDuplicateWalletErrors(
+      members.map((m) => (m.name.trim() ? m.walletAddress : undefined))
+    );
+    Object.entries(duplicateErrors).forEach(([i, message]) => {
+      errs[`member_addr_${i}`] = message;
     });
 
     setErrors(errs);
