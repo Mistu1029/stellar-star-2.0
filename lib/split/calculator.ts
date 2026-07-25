@@ -84,3 +84,36 @@ export function isValidXLMAmount(value: string): boolean {
 export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address);
 }
+
+/**
+ * Detects members sharing the same Stellar wallet address, comparing
+ * trimmed + uppercased values. Only syntactically valid addresses are
+ * considered — invalid ones are reported separately by field-level checks.
+ * Returns a map of member index -> error message, flagging every member
+ * involved in a collision (not just the second occurrence).
+ */
+export function findDuplicateWalletErrors(
+  addresses: Array<string | undefined>
+): Record<number, string> {
+  const seen = new Map<string, number>();
+  const errors: Record<number, string> = {};
+
+  addresses.forEach((address, index) => {
+    const raw = address?.trim();
+    if (!raw || !isValidStellarAddress(raw)) return;
+
+    const normalised = raw.toUpperCase();
+    const firstIndex = seen.get(normalised);
+    if (firstIndex === undefined) {
+      seen.set(normalised, index);
+      return;
+    }
+
+    errors[index] = `Duplicate wallet address — already used by member ${firstIndex + 1}.`;
+    if (!errors[firstIndex]) {
+      errors[firstIndex] = `Duplicate wallet address — also used by member ${index + 1}.`;
+    }
+  });
+
+  return errors;
+}

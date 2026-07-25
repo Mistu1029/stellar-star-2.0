@@ -4,6 +4,7 @@ import {
   calculateSplit,
   isValidXLMAmount,
   isValidStellarAddress,
+  findDuplicateWalletErrors,
 } from "@/lib/split/calculator";
 import type { Member } from "@/types/expense";
 
@@ -156,5 +157,49 @@ describe("isValidStellarAddress", () => {
 
   it("rejects another regex-shaped address with bad checksum", () => {
     expect(isValidStellarAddress("G" + "A".repeat(55))).toBe(false);
+  });
+});
+
+// ─── findDuplicateWalletErrors ────────────────────────────────────────────────
+
+describe("findDuplicateWalletErrors", () => {
+  const ADDR_A = "GDQAXCC66ZI3RLPA72TTWGI2MN6K4LH3JEM6NKXKR7LPJ3R7OYIJF5LV";
+  const ADDR_B = "GAYP4BR4UCI2OT6T7OMVZWWDGCFXHCB7NH64UNGPUHSND3F5SJKBS7AU";
+  const ADDR_C = "GA4ZPR3FCSUCTM4NK4SKNMBXV4IS7CUDISAX7PWK3PWFBWIQH2OW2O6I";
+
+  it("flags both members when two share the same address", () => {
+    const errors = findDuplicateWalletErrors([ADDR_A, ADDR_A]);
+    expect(errors[0]).toMatch(/Duplicate wallet address/);
+    expect(errors[1]).toMatch(/Duplicate wallet address/);
+  });
+
+  it("trims whitespace before comparing", () => {
+    const errors = findDuplicateWalletErrors([`  ${ADDR_A}  `, ADDR_A]);
+    expect(errors[1]).toMatch(/Duplicate wallet address/);
+  });
+
+  it("skips lowercase input, since only valid (uppercase) StrKey addresses are compared", () => {
+    // StrKey addresses are always uppercase; a lowercased address fails
+    // isValidStellarAddress and is excluded from duplicate detection
+    // entirely (its own field-level "Invalid Stellar address" error covers it).
+    const errors = findDuplicateWalletErrors([ADDR_A.toLowerCase(), ADDR_A]);
+    expect(errors).toEqual({});
+  });
+
+  it("flags every member sharing an address, not just the second", () => {
+    const errors = findDuplicateWalletErrors([ADDR_A, ADDR_A, ADDR_A]);
+    expect(errors[0]).toMatch(/Duplicate wallet address/);
+    expect(errors[1]).toMatch(/Duplicate wallet address/);
+    expect(errors[2]).toMatch(/Duplicate wallet address/);
+  });
+
+  it("does not flag distinct valid addresses", () => {
+    const errors = findDuplicateWalletErrors([ADDR_A, ADDR_B, ADDR_C]);
+    expect(errors).toEqual({});
+  });
+
+  it("ignores empty and invalid entries when checking for duplicates", () => {
+    const errors = findDuplicateWalletErrors([undefined, "", "not-an-address", ADDR_A, ADDR_A]);
+    expect(Object.keys(errors)).toEqual(["3", "4"]);
   });
 });
