@@ -28,8 +28,15 @@ const clientCache = new Map<string, SupabaseClient>();
 
 export function clearAuthenticatedClientCache(walletAddress?: string): void {
   if (walletAddress) {
-    clientCache.delete(walletAddress);
+    const client = clientCache.get(walletAddress);
+    if (client) {
+      client.removeAllChannels();
+      clientCache.delete(walletAddress);
+    }
   } else {
+    for (const client of clientCache.values()) {
+      client.removeAllChannels();
+    }
     clientCache.clear();
   }
 }
