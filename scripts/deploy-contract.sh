@@ -21,13 +21,26 @@
 
 set -euo pipefail
 
+fail() {
+  local message="${1:-Deployment failed.}"
+  local code="${2:-1}"
+  echo ""
+  echo "❌ ${message}"
+  exit "$code"
+}
+
+on_error() {
+  local exit_code=$?
+  echo ""
+  echo "❌ Deployment failed."
+  echo "Failed step: ${CURRENT_STEP}"
+  exit "$exit_code"
+}
+
 CURRENT_STEP="Starting deployment"
 START_TIME=$(date +%s)
 
-trap 'echo "";
-echo "❌ Deployment failed.";
-echo "Failed step: ${CURRENT_STEP}";
-exit 1' ERR
+trap on_error ERR
 
 ACCOUNT="${1:-}"
 if [[ -z "$ACCOUNT" ]]; then
@@ -38,12 +51,17 @@ fi
 
 echo "▸ Checking required dependencies..."
 
-for cmd in stellar cargo node; do
+for cmd in stellar cargo; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "❌ Missing required dependency: $cmd"
-    exit 1
+    fail "Missing required dependency: $cmd"
   fi
 done
+
+if [[ "$ACCOUNT" =~ ^S[A-Z2-7]{55}$ ]]; then
+  if ! command -v node >/dev/null 2>&1; then
+    fail "Missing required dependency: node"
+  fi
+fi
 
 echo "  [OK] All required dependencies found."
 echo ""
@@ -81,8 +99,7 @@ else
 fi
 
 if [[ -z "$DEPLOYER_ADDRESS" ]]; then
-  echo "❌ Failed to resolve deployer public address."
-  exit 1
+  fail "Failed to resolve deployer public address."
 fi
 echo "  [OK] Resolved deployer public address: $DEPLOYER_ADDRESS"
 echo ""
@@ -98,8 +115,7 @@ POOL_CONTRACT_ID=$(stellar contract deploy \
   --inclusion-fee 1000000)
 echo "  [OK] Settlement Pool contract deployed: $POOL_CONTRACT_ID"
 if [[ -z "$POOL_CONTRACT_ID" ]]; then
-  echo "❌ Pool contract deployment returned an empty contract ID."
-  exit 1
+  fail "Pool contract deployment returned an empty contract ID."
 fi
 echo ""
 
@@ -113,8 +129,7 @@ SETTLEMENT_CONTRACT_ID=$(stellar contract deploy \
   --inclusion-fee 1000000)
 echo "  [OK] Stellar-star Settlement contract deployed: $SETTLEMENT_CONTRACT_ID"
 if [[ -z "$SETTLEMENT_CONTRACT_ID" ]]; then
-  echo "❌ Settlement contract deployment returned an empty contract ID."
-  exit 1
+  fail "Settlement contract deployment returned an empty contract ID."
 fi
 echo ""
 
