@@ -18,6 +18,7 @@ import { NETWORK_PASSPHRASE } from "@/lib/utils/constants";
 import { PayButton } from "@/components/payment/PayButton";
 import { TransactionHash } from "@/components/payment/TransactionHash";
 import { cn } from "@/lib/utils";
+import { useNetPayment } from "@/hooks/useNetPayment";
 
 interface SettlementSummaryProps {
   trip: Trip;
@@ -77,66 +78,54 @@ function NetPaymentRow({
   payment,
   index,
   tripName,
+  tripId,
   expenses,
   isOnChain,
 }: {
   payment: NetPayment;
   index: number;
   tripName: string;
+  tripId: string;
   expenses: Expense[];
   isOnChain: boolean;
 }) {
   const { publicKey } = useWallet();
-  const { markSharePaid } = useExpense();
-  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
-  const [rowState, setRowState] = useState<RowState>({ status: "idle" });
+  const {
+    paymentState,
+    payNetSettlement,
+    retryOnChainRecord,
+    loadPendingForPayer,
+    hasPendingRetry,
+    txHash,
+    onChain,
+    isIdle,
+    isLoading,
+    isSuccess,
+  } = useNetPayment({ tripId });
+
+  React.useEffect(() => {
+    if (payment.toWallet) {
+      loadPendingForPayer(payment.toWallet);
+    }
+  }, [loadPendingForPayer, payment.toWallet]);
 
   const canPay =
     publicKey &&
     payment.toWallet &&
-    rowState.status === "idle" &&
+    isIdle &&
     publicKey === payment.fromWallet;
 
   const handlePay = async () => {
-    if (!publicKey || !payment.toWallet) return;
-    try {
-      setRowState({ status: "paying" });
-      const memo = trimToMemoBytes(`StellarStar|${tripName}`, 28);
-      const { xdr } = await buildPaymentTransaction({
-        sourcePublicKey:      publicKey,
-        destinationPublicKey: payment.toWallet,
-        amount:               payment.amount,
-        memoText:             memo,
-      });
-      toastInfo("Waiting for Freighter...", "Confirm the settlement payment.");
-      const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
-      const { hash }  = await submitSignedTransaction(signedXDR);
-
-      for (const debt of payment.settledDebts) {
-        try {
-          await markSharePaid(debt.expenseId, debt.fromId, hash);
-        } catch {
-          /* non-fatal */
-        }
-      }
-
-      setRowState({ status: "done", txHash: hash });
-      toastSuccess(
-        "Settlement sent!",
-        `Paid ${parseFloat(payment.amount).toFixed(4)} XLM to ${payment.to}`,
-      );
-    } catch (err: unknown) {
-      const msg        = err instanceof Error ? err.message : "Payment failed";
-      const isRejected = /reject|denied|cancel/i.test(msg);
-      toastError(
-        isRejected ? "Transaction cancelled" : "Payment failed",
-        isRejected ? "You rejected the payment in Freighter." : msg,
-      );
-      setRowState({ status: "idle" });
-    }
+    if (!payment.toWallet) return;
+    await payNetSettlement({
+      debts: payment.settledDebts,
+      totalAmountXlm: payment.amount,
+      payerWalletAddress: payment.toWallet,
+      tripName,
+    });
   };
 
-  const done    = rowState.status === "done";
+  const done    = isSuccess || onChain;
   const settled = done || isOnChain;
 
   return (
@@ -162,7 +151,20 @@ function NetPaymentRow({
             <span className="text-[10px] font-normal text-[#888]">XLM</span>
           </span>
 
-          {settled ? (
+          {hasPendingRetry && paymentState.status === "partial_success" ? (
+            <div className="flex flex-col gap-1 items-end">
+              <span className="text-[10px] text-orange-600 font-medium">
+                XLM sent. Pool record failed.
+              </span>
+              <button
+                onClick={retryOnChainRecord}
+                disabled={isLoading}
+                className="bg-orange-100 hover:bg-orange-200 text-orange-800 text-[10px] px-2 py-1 rounded-md font-bold transition-colors disabled:opacity-50"
+              >
+                {isLoading ? "Retrying..." : "Retry contract record"}
+              </button>
+            </div>
+          ) : settled ? (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-[#2DD4BF]/30 text-[#134E4A] rounded-full">
               {isOnChain && !done ? (
                 <><Database size={9} /> On-chain</>
@@ -175,7 +177,7 @@ function NetPaymentRow({
               amount={payment.amount}
               recipientName={payment.to}
               onClick={handlePay}
-              isLoading={rowState.status === "paying"}
+              isLoading={isLoading}
               disabled={!canPay}
               size="sm"
             />
@@ -183,9 +185,9 @@ function NetPaymentRow({
         </div>
       </div>
 
-      {done && (
+      {(done || paymentState.status === "partial_success") && txHash && (
         <div className="pl-1">
-          <TransactionHash hash={rowState.txHash} compact />
+          <TransactionHash hash={txHash} compact />
         </div>
       )}
 
@@ -196,7 +198,7 @@ function NetPaymentRow({
         </p>
       )}
 
-      {!settled && rowState.status === "idle" && publicKey && publicKey !== payment.fromWallet && (
+      {!settled && isIdle && publicKey && publicKey !== payment.fromWallet && (
         <p className="text-[10px] text-[#AAA] pl-1">
           Connect {payment.from}&apos;s wallet to pay
         </p>
@@ -253,6 +255,7 @@ export function SettlementSummary({ trip, expenses, onChainEvents = [] }: Settle
           payment={p}
           index={i}
           tripName={trip.name}
+          tripId={trip.id}
           expenses={expenses}
           isOnChain={isNetPaymentOnChain(p)}
         />

@@ -375,6 +375,79 @@ export async function recordPaymentOnChain(
   }
 }
 
+export interface RecordNetSettlementParams {
+  memberPublicKey: string;
+  tripId: string;
+  payerPublicKey: string;
+  txHash: string;
+  debts: { expenseId: string; amountXlm: string }[];
+  onStatus?: (step: "simulating" | "signing" | "sending" | "confirming") => void;
+}
+
+export async function recordNetSettlementOnChain(
+  params: RecordNetSettlementParams
+): Promise<RecordPaymentResult> {
+  if (!contractReady("recordNetSettlementOnChain")) {
+    return { success: false, error: "Contract not configured." };
+  }
+
+  const {
+    memberPublicKey,
+    tripId,
+    payerPublicKey,
+    txHash,
+    debts,
+    onStatus,
+  } = params;
+
+  try {
+    const account  = await loadAccount(memberPublicKey);
+    const contract = new Contract(CONTRACT_ID);
+
+    let txBuilder = new TransactionBuilder(account, {
+      fee:              SOROBAN_BASE_FEE,
+      networkPassphrase: NETWORK_PASSPHRASE,
+    });
+
+    for (const debt of debts) {
+      const amountStroops = xlmToStroops(debt.amountXlm);
+      const contractArgs = [
+        nativeToScVal(tripId,           { type: "string" }),
+        nativeToScVal(debt.expenseId,   { type: "string" }),
+        new Address(payerPublicKey).toScVal(),
+        new Address(memberPublicKey).toScVal(),
+        nativeToScVal(amountStroops,    { type: "i128" }),
+        nativeToScVal(txHash,           { type: "string" }),
+      ];
+      txBuilder = txBuilder.addOperation(contract.call("record_payment", ...contractArgs));
+    }
+
+    const tx = txBuilder.setTimeout(60).build();
+
+    onStatus?.("simulating");
+    const simResult = await sorobanServer.simulateTransaction(tx);
+
+    if (rpc.Api.isSimulationError(simResult)) {
+      throw new Error(decodeContractError(simResult.error));
+    }
+    if (!rpc.Api.isSimulationSuccess(simResult)) {
+      throw new Error("Contract simulation returned an unexpected result.");
+    }
+
+    const assembled = rpc.assembleTransaction(tx, simResult).build();
+
+    onStatus?.("signing");
+    const signedXdr = await signXDR(assembled.toXDR(), NETWORK_PASSPHRASE);
+
+    const { ledger } = await submitAndPoll(signedXdr, onStatus);
+    return { success: true, ledger };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Contract call failed.";
+    console.error("[StellarStar:contract] recordNetSettlementOnChain error:", message);
+    return { success: false, error: message };
+  }
+}
+
 export async function getContractPayments(
   callerPublicKey: string,
   tripId: string

@@ -98,3 +98,82 @@ export function clearPendingOnChain(
   }
   writeStoredMap(map);
 }
+
+// ---------------------------------------------------------------------------
+// Net Settlement Helpers
+// ---------------------------------------------------------------------------
+
+export const LS_PENDING_NET_SETTLEMENT = "StellarStar:pendingNetSettlement";
+
+export interface PendingNetSettlementRecord {
+  memberPublicKey: string;
+  tripId: string;
+  payerPublicKey: string;
+  totalAmountXlm: string;
+  txHash: string;
+  ledger: number;
+  debts: { expenseId: string; amountXlm: string }[];
+}
+
+type StoredNetMap = Record<string, Record<string, PendingNetSettlementRecord>>;
+
+function readStoredNetMap(): StoredNetMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(LS_PENDING_NET_SETTLEMENT);
+    if (!raw) return {};
+    return JSON.parse(raw) as StoredNetMap;
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredNetMap(map: StoredNetMap): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LS_PENDING_NET_SETTLEMENT, JSON.stringify(map));
+  } catch {
+    // Quota exceeded or private-mode restriction — silently skip.
+  }
+}
+
+/**
+ * Persist a pending net settlement retry record.
+ * Scoped by wallet and trip (assuming only one net settlement per trip/payer combo at a time, or just scoping by trip).
+ * Wait, let's scope it by `tripId` + `payerPublicKey` so multiple net settlements for different users in the same trip can be tracked.
+ */
+export function savePendingNetSettlement(
+  publicKey: string,
+  record: PendingNetSettlementRecord,
+): void {
+  const map = readStoredNetMap();
+  if (!map[publicKey]) map[publicKey] = {};
+  const key = `${record.tripId}:${record.payerPublicKey}`;
+  map[publicKey][key] = record;
+  writeStoredNetMap(map);
+}
+
+export function loadPendingNetSettlement(
+  publicKey: string,
+  tripId: string,
+  payerPublicKey: string,
+): PendingNetSettlementRecord | null {
+  const map = readStoredNetMap();
+  const key = `${tripId}:${payerPublicKey}`;
+  return map[publicKey]?.[key] ?? null;
+}
+
+export function clearPendingNetSettlement(
+  publicKey: string,
+  tripId: string,
+  payerPublicKey: string,
+): void {
+  const map = readStoredNetMap();
+  if (!map[publicKey]) return;
+  const key = `${tripId}:${payerPublicKey}`;
+  delete map[publicKey][key];
+  if (Object.keys(map[publicKey]).length === 0) {
+    delete map[publicKey];
+  }
+  writeStoredNetMap(map);
+}
