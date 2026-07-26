@@ -6,6 +6,8 @@
  * Spec: https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0007.md
  */
 
+import { trimToMemoBytes } from "@/lib/stellar/buildTransaction";
+
 export interface QRPaymentData {
   /** Destination Stellar address (G...) */
   destination: string;
@@ -25,16 +27,7 @@ export function buildQRPaymentURI({ destination, amount, memo }: QRPaymentData):
     amount,
   });
   if (memo) {
-    let finalMemo = memo;
-    const bytes = new TextEncoder().encode(memo);
-    if (bytes.length > 28) {
-      const sliced = bytes.slice(0, 28);
-      let decoded = new TextDecoder("utf-8").decode(sliced);
-      while (decoded.endsWith("\uFFFD") && decoded.length > 0) {
-        decoded = decoded.slice(0, -1);
-      }
-      finalMemo = decoded;
-    }
+    const finalMemo = trimToMemoBytes(memo, 28);
     params.set("memo", finalMemo);
     params.set("memo_type", "MEMO_TEXT");
   }
