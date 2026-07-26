@@ -7,6 +7,9 @@ jest.mock("@supabase/supabase-js", () => ({
   createClient: jest.fn().mockImplementation(() => ({
     mockClient: true,
     removeAllChannels: jest.fn(),
+    realtime: {
+      setAuth: jest.fn(),
+    },
   })),
 }));
 

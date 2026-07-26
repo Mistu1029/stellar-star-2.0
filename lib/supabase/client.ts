@@ -62,6 +62,7 @@ export function createAuthenticatedClient(walletAddress?: string): SupabaseClien
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
+  client.realtime.setAuth(token);
   clientCache.set(key, client);
   return client;
 }
