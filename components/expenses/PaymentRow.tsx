@@ -64,6 +64,13 @@ export function PaymentRow({
     !isPayerRow &&
     (!connectedWalletAddress ||
       (!!share.walletAddress && share.walletAddress === connectedWalletAddress));
+  const poolBalanceValue = poolBalance === null || poolBalance === undefined ? null : parseFloat(poolBalance);
+  const shareAmountValue = parseFloat(share.amount);
+  const poolShortfall =
+    poolBalanceValue !== null ? Math.max(shareAmountValue - poolBalanceValue, 0) : null;
+  const hasEnoughPoolCredit = poolShortfall !== null && poolShortfall <= 0;
+  const isPoolCheckBlocking =
+    isMyRow && !share.paid && poolBalance !== undefined && !hasEnoughPoolCredit;
 
   return (
     <>
@@ -138,7 +145,7 @@ export function PaymentRow({
                 recipientName={share.name}
                 onClick={() => onPay?.(share)}
                 isLoading={isPaying}
-                disabled={!share.walletAddress || !onPay}
+                disabled={!share.walletAddress || !onPay || isPoolCheckBlocking}
                 size="sm"
               />
             ) : (
@@ -153,32 +160,29 @@ export function PaymentRow({
         {isMyRow && !share.paid && poolBalance !== undefined && (
           <div className="pl-11 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs border-t border-[#F5F5F5] pt-2">
             <span className="text-[#666]">
-              Pool Credit:{" "}
+              Contract pool:{" "}
               <strong className="text-[#0F0F14]">
-                {poolBalance !== null ? `${parseFloat(poolBalance).toFixed(4)} XLM` : "Loading..."}
+                {poolBalanceValue !== null ? `${poolBalanceValue.toFixed(4)} XLM` : "Loading..."}
               </strong>
             </span>
-            {poolBalance !== null && (
+            {poolShortfall !== null && (
               <>
-                {parseFloat(poolBalance) >= parseFloat(share.amount) ? (
-                  <span className="text-[#134E4A] font-semibold">Enough</span>
+                {poolShortfall <= 0 ? (
+                  <span className="text-[#134E4A] font-semibold">Ready to record</span>
                 ) : (
                   <span className="text-red-500 font-semibold">
-                    Shortfall: {(parseFloat(share.amount) - parseFloat(poolBalance)).toFixed(4)} XLM
+                    Shortfall: {poolShortfall.toFixed(4)} XLM
                   </span>
                 )}
-                {parseFloat(poolBalance) < parseFloat(share.amount) && (
+                {poolShortfall > 0 && (
                   <button
                     disabled={depositLoading}
-                    onClick={() => {
-                      const shortfall = parseFloat(share.amount) - parseFloat(poolBalance);
-                      onDepositPool?.(shortfall.toFixed(7));
-                    }}
+                    onClick={() => onDepositPool?.(poolShortfall.toFixed(7))}
                     className={cn(
                       "font-bold text-[#2DD4BF] hover:text-[#25BFA3] transition-colors underline disabled:opacity-50 disabled:no-underline"
                     )}
                   >
-                    {depositLoading ? "Depositing..." : "Deposit Shortfall"}
+                    {depositLoading ? "Depositing..." : "Deposit shortfall"}
                   </button>
                 )}
               </>

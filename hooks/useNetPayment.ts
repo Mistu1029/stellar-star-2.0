@@ -29,6 +29,7 @@ type OnChainStep = "simulating" | "signing" | "sending" | "confirming";
 export type PaymentState =
   | { status: "idle" }
   | { status: "building" }
+  | { status: "blocked"; message: string }
   | { status: "signing" }
   | { status: "submitting" }
   | { status: "recording"; step: OnChainStep }
@@ -263,6 +264,18 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       }
 
       try {
+        if (CONTRACT_ID && tripId) {
+          const poolCheck = await precheckPoolBalance(publicKey, publicKey, totalAmountXlm);
+          if (!poolCheck.ok) {
+            const msg =
+              poolCheck.error ?? "Add enough pool credit before sending this settlement.";
+            setPaymentState({ status: "blocked", message: msg });
+            toastError("Pool credit required", msg);
+            await loadPoolBalance();
+            return;
+          }
+        }
+
         setPaymentState({ status: "building" });
         const memoText = tripName;
         const expectedMemo = buildExpectedPaymentMemo(memoText);
@@ -300,28 +313,22 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             onChainError = verifyResult.error ?? "Invalid payment transaction on network.";
             buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
           } else {
-            const poolCheck = await precheckPoolBalance(publicKey, publicKey, totalAmountXlm);
-            if (!poolCheck.ok) {
-              onChainError = poolCheck.error ?? "Pool balance is too low to record this settlement on-chain.";
-              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
-            } else {
-              setPaymentState({ status: "recording", step: "simulating" });
-              const contractResult = await recordNetSettlementOnChain({
-                memberPublicKey: publicKey,
-                tripId,
-                payerPublicKey: payerWalletAddress,
-                txHash: result.hash,
-                debts: mappedDebts,
-                onStatus: (step) => setPaymentState({ status: "recording", step }),
-              });
+            setPaymentState({ status: "recording", step: "simulating" });
+            const contractResult = await recordNetSettlementOnChain({
+              memberPublicKey: publicKey,
+              tripId,
+              payerPublicKey: payerWalletAddress,
+              txHash: result.hash,
+              debts: mappedDebts,
+              onStatus: (step) => setPaymentState({ status: "recording", step }),
+            });
 
-              if (contractResult.success) {
-                onChain = true;
-                loadPoolBalance();
-              } else {
-                onChainError = contractResult.error ?? "On-chain recording failed.";
-                buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
-              }
+            if (contractResult.success) {
+              onChain = true;
+              loadPoolBalance();
+            } else {
+              onChainError = contractResult.error ?? "On-chain recording failed.";
+              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
             }
           }
         }
