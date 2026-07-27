@@ -34,6 +34,8 @@ export function TripCard({
     !!connectedWalletAddress &&
     !!trip.createdByWallet &&
     trip.createdByWallet === connectedWalletAddress;
+  const canDelete = !!onDelete && isOwner;
+  const canShowDeleteHint = !!onDelete && !isOwner;
 
   return (
     <motion.div
@@ -92,7 +94,7 @@ export function TripCard({
       {/* Footer */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-[#F5F5F5]">
         <span className="text-[10px] text-[#BBB]">{createdAt}</span>
-        {isOwner && (
+        {canDelete ? (
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -103,7 +105,9 @@ export function TripCard({
             <Trash2 size={11} />
             Delete
           </button>
-        )}
+        ) : canShowDeleteHint ? (
+          <span className="text-[10px] text-[#CCC] italic">Only the creator can delete</span>
+        ) : null}
       </div>
     </motion.div>
   );

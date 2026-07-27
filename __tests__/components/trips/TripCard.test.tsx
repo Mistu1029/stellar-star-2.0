@@ -58,6 +58,7 @@ describe("TripCard Owner-Aware Delete Controls", () => {
 
     const deleteBtn = screen.queryByRole("button", { name: /delete/i });
     expect(deleteBtn).toBeNull();
+    expect(screen.getByText(/Only the creator can delete/i)).toBeTruthy();
   });
 
   it("hides the Delete button when no wallet is connected", () => {
@@ -71,5 +72,6 @@ describe("TripCard Owner-Aware Delete Controls", () => {
 
     const deleteBtn = screen.queryByRole("button", { name: /delete/i });
     expect(deleteBtn).toBeNull();
+    expect(screen.getByText(/Only the creator can delete/i)).toBeTruthy();
   });
 });
