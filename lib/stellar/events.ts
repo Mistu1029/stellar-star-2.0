@@ -13,6 +13,10 @@ type RawEventLike = {
   value?: unknown;
 };
 
+export function buildPaymentEventKey(event: ContractPaymentEvent): string {
+  return `${event.tripId}:${event.expenseId}:${event.member.toLowerCase()}:${event.amountStroops}`;
+}
+
 export function parsePaymentEvent(raw: RawEventLike): ContractPaymentEvent | null {
   try {
     const topicScVals = Array.isArray(raw.topic) ? raw.topic : [];
