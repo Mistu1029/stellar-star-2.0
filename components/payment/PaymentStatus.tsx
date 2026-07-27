@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, XCircle, Loader2, Database } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Database, AlertCircle } from "lucide-react";
 import { TransactionHash } from "./TransactionHash";
 import type { PaymentState } from "@/hooks/usePayment";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,7 @@ export function PaymentStatus({ state, onReset, onRetryOnChain, className }: Pay
           className={cn("rounded-xl border p-4", className, {
             "bg-[#F0FDFA] border-[#2DD4BF]/40": state.status === "success",
             "bg-red-50 border-red-200":          state.status === "error",
+            "bg-amber-50 border-amber-200":      state.status === "blocked",
             "bg-[#F8F8F8] border-[#E5E5E5]":    isLoadingState,
           })}
         >
@@ -132,6 +133,25 @@ export function PaymentStatus({ state, onReset, onRetryOnChain, className }: Pay
                   <button
                     onClick={onReset}
                     className="text-xs text-[#AAA] hover:text-[#555] transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Blocked before wallet transfer */}
+          {state.status === "blocked" && (
+            <div className="flex items-start gap-2">
+              <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-800">Pool credit required</p>
+                <p className="text-xs text-amber-700 mt-0.5">{state.message}</p>
+                {onReset && (
+                  <button
+                    onClick={onReset}
+                    className="text-xs text-amber-700 hover:text-amber-900 underline mt-1 transition-colors"
                   >
                     Dismiss
                   </button>
