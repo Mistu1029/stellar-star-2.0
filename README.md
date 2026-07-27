@@ -351,9 +351,23 @@ npm test -- --runInBand
 npm run test:coverage
 ```
 
+**Verify proof assets & docs links (issue #73):**
+
+```bash
+npm run proof:links
+```
+
+This standalone script (script: `scripts/proof-link-check.js`) confirms that:
+
+- `public/mobile-responsive.png` exists (the mobile viewport screenshot).
+- `README.md` references the local mobile proof asset.
+- All remote proof URLs in `README.md`, `docs/REQUIREMENT_PROOF_MATRIX.md`, `docs/ARCHITECTURE_AND_LIMITATIONS.md`, and `docs/RELEASE_CHECKLIST.md` resolve successfully.
+
+It is also wired into the `quality` job of `.github/workflows/ci.yml`, so every PR and push to `main` runs the same checks.
+
 **Current status in this workspace:**
 - Run `npm test -- --runInBand` to see the latest total suites/tests after any new test cases are added.
-- Run `npm run lint`, `npx tsc --noEmit`, and `npm run build` for release checks.
+- Run `npm run lint`, `npx tsc --noEmit`, `npm run proof:links`, and `npm run build` for release checks.
 - Duplicate wallet address validation (trip and expense forms) is covered by `__tests__/split/calculator.test.ts`, `__tests__/hooks/useExpenseFormValidation.test.ts`, and `__tests__/components/trips/TripFormDuplicateWallet.test.tsx`.
 - Pending on-chain retry persistence (localStorage, wallet-scoped, survives refresh) is covered by `__tests__/utils/pendingOnChain.test.ts` and `__tests__/payment/usePayment.retry-persistence.test.tsx`.
 
@@ -373,8 +387,9 @@ cargo test
 | 1 | `npm run lint` | Lint checks |
 | 2 | `npx tsc --noEmit` | Type checking |
 | 3 | `npm test -- --runInBand` | Run tests |
-| 4 | `npm run build` | Production build |
-| 5 | `cd contract && cargo check` | Rust contract check |
+| 4 | `npm run proof:links` | Verify mobile proof asset & docs links |
+| 5 | `npm run build` | Production build |
+| 6 | `cd contract && cargo check` | Rust contract check |
 
 ---
 
