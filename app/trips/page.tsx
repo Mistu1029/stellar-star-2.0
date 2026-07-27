@@ -62,9 +62,17 @@ export default function TripsPage() {
       toastSuccess("Trip deleted", "The trip has been successfully deleted.");
     } catch (err: any) {
       console.error("Failed to delete trip:", err);
+      const message = String(err?.message ?? "");
+      const isPermissionDenied =
+        err?.code === "42501" ||
+        message.toLowerCase().includes("permission") ||
+        message.toLowerCase().includes("policy") ||
+        message.toLowerCase().includes("row-level security");
       toastError(
         "Failed to delete trip",
-        err.message || "You do not have permission to delete this trip."
+        isPermissionDenied
+          ? "Only the trip creator can delete this trip."
+          : message || "Could not delete this trip. Please try again."
       );
     }
   };
