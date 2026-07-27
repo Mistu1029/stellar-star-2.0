@@ -1,10 +1,16 @@
-import { HORIZON_URL } from "@/lib/utils/constants";
+import { HORIZON_URL, MEMO_PREFIX } from "@/lib/utils/constants";
+import { trimToMemoBytes } from "@/lib/stellar/buildTransaction";
 
 export interface VerifyTxParams {
   txHash: string;
   expectedSource: string;
   expectedDestination: string;
   expectedAmountXlm: string;
+  expectedMemo?: string;
+}
+
+export function buildExpectedPaymentMemo(memoText: string): string {
+  return trimToMemoBytes(`${MEMO_PREFIX}|${memoText}`);
 }
 
 export async function verifyPaymentTransaction({
@@ -12,6 +18,7 @@ export async function verifyPaymentTransaction({
   expectedSource,
   expectedDestination,
   expectedAmountXlm,
+  expectedMemo,
 }: VerifyTxParams): Promise<{ valid: boolean; error?: string }> {
   try {
     const txRes = await fetch(`${HORIZON_URL}/transactions/${txHash}?_ts=${Date.now()}`);
@@ -26,6 +33,19 @@ export async function verifyPaymentTransaction({
     
     if (!tx.successful) {
       return { valid: false, error: "Transaction failed on the ledger." };
+    }
+
+    if (typeof tx.ledger !== "number" || tx.ledger <= 0) {
+      return { valid: false, error: "Transaction ledger status is unavailable." };
+    }
+
+    if (expectedMemo) {
+      if (tx.memo_type !== "text") {
+        return { valid: false, error: "Transaction memo type does not match the expected payment memo." };
+      }
+      if (String(tx.memo ?? "") !== expectedMemo) {
+        return { valid: false, error: "Transaction memo does not match the expected payment details." };
+      }
     }
 
     const opsRes = await fetch(`${HORIZON_URL}/transactions/${txHash}/operations?_ts=${Date.now()}`);

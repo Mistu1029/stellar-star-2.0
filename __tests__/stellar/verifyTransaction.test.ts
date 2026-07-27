@@ -19,6 +19,7 @@ describe("verifyPaymentTransaction", () => {
     json: async () => ({
       successful,
       source_account: sourceAccount,
+      ledger: 123,
     }),
   });
 
@@ -145,5 +146,42 @@ describe("verifyPaymentTransaction", () => {
     });
 
     expect(result.valid).toBe(false);
+  });
+
+  it("returns false if memo does not match the expected payment memo", async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          successful: true,
+          source_account: "SOURCE123",
+          ledger: 123,
+          memo_type: "text",
+          memo: "wrong-memo",
+        }),
+      })
+      .mockResolvedValueOnce(
+        mockOpsResponse([
+          {
+            type: "payment",
+            source_account: "SOURCE123",
+            to: "DEST456",
+            asset_type: "native",
+            amount: "10.0000000",
+          },
+        ])
+      );
+
+    const result = await verifyPaymentTransaction({
+      txHash: "fakehash",
+      expectedSource: "SOURCE123",
+      expectedDestination: "DEST456",
+      expectedAmountXlm: "10",
+      expectedMemo: "StellarStar|Dinner|Alice",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/memo/i);
   });
 });

@@ -170,6 +170,7 @@ describe("usePayment — retry persistence", () => {
       expenseId:       "exp-persist-2",
       payerPublicKey:  PAYER,
       amountXlm:       "2.0000000",
+      memoText:        "Dinner|Alice",
       txHash:          "tx-restore-hash",
       ledger:          600,
     };
@@ -249,6 +250,7 @@ describe("usePayment — retry persistence", () => {
       expenseId:       "exp-persist-5",
       payerPublicKey:  PAYER,
       amountXlm:       "1.0000000",
+      memoText:        "Dinner|Alice",
       txHash:          "tx-other-wallet",
       ledger:          800,
     };
@@ -277,6 +279,7 @@ describe("usePayment — retry persistence", () => {
       expenseId:       "e-only",
       payerPublicKey:  PAYER,
       amountXlm:       "1",
+      memoText:        "Dinner|Alice",
       txHash:          "h",
       ledger:          1,
     };

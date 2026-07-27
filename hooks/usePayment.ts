@@ -11,7 +11,7 @@ import {
   depositPoolBalance,
   stroopsToXlm,
 } from "@/lib/stellar/contract";
-import { verifyPaymentTransaction } from "@/lib/stellar/verifyTransaction";
+import { buildExpectedPaymentMemo, verifyPaymentTransaction } from "@/lib/stellar/verifyTransaction";
 import { signXDR } from "@/lib/freighter";
 import { useWallet } from "@/hooks/useWallet";
 import { useExpense } from "@/hooks/useExpense";
@@ -99,6 +99,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       payerWalletAddress: string,
       amountXlm: string,
       tripId: string,
+      memoText: string,
     ) => {
       if (!publicKey) return;
       const record: PendingOnChainRecord = {
@@ -107,6 +108,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         expenseId,
         payerPublicKey: payerWalletAddress,
         amountXlm,
+        memoText,
         txHash,
         ledger,
       };
@@ -203,6 +205,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
   const retryOnChainRecord = useCallback(async () => {
     if (!pendingOnChain) return;
 
+    const expectedMemo = buildExpectedPaymentMemo(pendingOnChain.memoText);
+
     const poolCheck = await precheckPoolBalance(
       pendingOnChain.memberPublicKey,
       pendingOnChain.memberPublicKey,
@@ -227,6 +231,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       expectedSource: pendingOnChain.memberPublicKey,
       expectedDestination: pendingOnChain.payerPublicKey,
       expectedAmountXlm: pendingOnChain.amountXlm,
+      expectedMemo,
     });
 
     if (!verifyResult.valid) {
@@ -308,7 +313,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
       try {
         setPaymentState({ status: "building" });
-        const memoText = `${expenseTitle}|${share.name}`.slice(0, 24);
+        const memoText = `${expenseTitle}|${share.name}`;
+        const expectedMemo = buildExpectedPaymentMemo(memoText);
         const { xdr } = await buildPaymentTransaction({
           sourcePublicKey:      publicKey,
           destinationPublicKey: payerWalletAddress,
@@ -334,17 +340,18 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
             expectedSource: publicKey,
             expectedDestination: payerWalletAddress,
             expectedAmountXlm: share.amount,
+            expectedMemo,
           });
 
           if (!verifyResult.valid) {
             onChainError = verifyResult.error ?? "Invalid payment transaction on network.";
-            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId);
+            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId, memoText);
           } else {
             const poolCheck = await precheckPoolBalance(publicKey, publicKey, share.amount);
             if (!poolCheck.ok) {
               onChainError =
                 poolCheck.error ?? "Pool balance is too low to record this payment on-chain.";
-              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId);
+              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId, memoText);
             } else {
               setPaymentState({ status: "recording", step: "simulating" });
               const contractResult = await recordPaymentOnChain({
@@ -362,7 +369,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
                 loadPoolBalance();
               } else {
                 onChainError = contractResult.error ?? "On-chain recording failed.";
-                buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId);
+                buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId, memoText);
               }
             }
           }
