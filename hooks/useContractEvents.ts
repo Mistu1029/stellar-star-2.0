@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchContractEvents } from "@/lib/stellar/events";
+import { buildPaymentEventKey, fetchContractEvents } from "@/lib/stellar/events";
 import type { ContractPaymentEvent } from "@/types/contract";
 import { CONTRACT_ID } from "@/lib/utils/constants";
 
@@ -33,8 +33,8 @@ export function useContractEvents(tripId: string | undefined): UseContractEvents
 
       if (result.events.length > 0) {
         setEvents((prev) => {
-          const known   = new Set(prev.map((e) => e.txHash));
-          const newEvts = result.events.filter((e) => !known.has(e.txHash));
+          const known   = new Set(prev.map(buildPaymentEventKey));
+          const newEvts = result.events.filter((e) => !known.has(buildPaymentEventKey(e)));
           return newEvts.length > 0 ? [...prev, ...newEvts] : prev;
         });
       }

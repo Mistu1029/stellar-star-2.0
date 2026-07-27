@@ -112,12 +112,11 @@ describe("SettlementSummary", () => {
 
     render(<SettlementSummary trip={trip} expenses={expenses} onChainEvents={onChainEvents} />);
 
-    expect(screen.getByText("On-chain")).toBeTruthy();
-    expect(screen.getByText("Pay 3.5000 XLM")).toBeTruthy();
-    expect(screen.queryByText("Confirmed on Stellar - ledger proof recorded")).toBeTruthy();
+    expect(screen.getAllByText("On-chain")).toHaveLength(1);
+    expect(screen.getByText("Confirmed on Stellar - ledger proof recorded")).toBeTruthy();
 
-    // The second payment row should still show a pay button because it has no exact matching event.
+    // The unrelated payment row should still be payable because only the matching expense/amount row is on-chain.
     expect(screen.getByText("Pay 3.5000 XLM")).toBeTruthy();
-    expect(screen.queryByText(/Pay 2.5000 XLM/i)).toBeNull();
+    expect(screen.queryByText("Pay 2.5000 XLM")).toBeNull();
   });
 });

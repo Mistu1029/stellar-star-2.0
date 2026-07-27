@@ -19,6 +19,7 @@ import { PayButton } from "@/components/payment/PayButton";
 import { TransactionHash } from "@/components/payment/TransactionHash";
 import { cn } from "@/lib/utils";
 import { useNetPayment } from "@/hooks/useNetPayment";
+import { buildPaymentEventKey } from "@/lib/stellar/events";
 
 interface SettlementSummaryProps {
   trip: Trip;
@@ -60,11 +61,6 @@ function xlmToStroops(amount: string | number): string {
   const normalizedWhole = whole.replace(/^0+(?=\d)/, "") || "0";
   const normalizedFraction = (fraction + "0000000").slice(0, 7);
   return `${BigInt(normalizedWhole) * 10_000_000n + BigInt(normalizedFraction)}`;
-}
-
-// Builds a unique lookup key for an on-chain contract payment event based on the trip, expense, debtor member, and amount in stroops.
-function buildPaymentEventKey(event: ContractPaymentEvent) {
-  return `${event.tripId}:${event.expenseId}:${event.member.toLowerCase()}:${event.amountStroops}`;
 }
 
 // Builds a lookup key for a debt row in the UI to match against on-chain payment keys using the exact trip, expense, debtor wallet, and amount in stroops.
