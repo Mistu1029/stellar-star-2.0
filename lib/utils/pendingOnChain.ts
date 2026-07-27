@@ -21,6 +21,7 @@ export interface PendingOnChainRecord {
   expenseId: string;
   payerPublicKey: string;
   amountXlm: string;
+  memoText: string;
   txHash: string;
   ledger: number;
 }
@@ -110,6 +111,7 @@ export interface PendingNetSettlementRecord {
   tripId: string;
   payerPublicKey: string;
   totalAmountXlm: string;
+  memoText: string;
   txHash: string;
   ledger: number;
   debts: { expenseId: string; amountXlm: string }[];

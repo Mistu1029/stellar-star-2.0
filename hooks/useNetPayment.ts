@@ -10,6 +10,7 @@ import {
   depositPoolBalance,
   stroopsToXlm,
 } from "@/lib/stellar/contract";
+import { buildExpectedPaymentMemo } from "@/lib/stellar/verifyTransaction";
 import { verifyPaymentTransaction } from "@/lib/stellar/verifyTransaction";
 import { signXDR } from "@/lib/freighter";
 import { useWallet } from "@/hooks/useWallet";
@@ -90,6 +91,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       payerPublicKey: string,
       totalAmountXlm: string,
       debts: { expenseId: string; amountXlm: string }[],
+      memoText: string,
     ) => {
       if (!publicKey) return;
       const record: PendingNetSettlementRecord = {
@@ -97,6 +99,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         tripId,
         payerPublicKey,
         totalAmountXlm,
+        memoText,
         txHash,
         ledger,
         debts,
@@ -177,6 +180,8 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
   const retryOnChainRecord = useCallback(async () => {
     if (!pendingNetSettlement) return;
 
+    const expectedMemo = buildExpectedPaymentMemo(pendingNetSettlement.memoText);
+
     const poolCheck = await precheckPoolBalance(
       pendingNetSettlement.memberPublicKey,
       pendingNetSettlement.memberPublicKey,
@@ -201,6 +206,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       expectedSource: pendingNetSettlement.memberPublicKey,
       expectedDestination: pendingNetSettlement.payerPublicKey,
       expectedAmountXlm: pendingNetSettlement.totalAmountXlm,
+      expectedMemo,
     });
 
     if (!verifyResult.valid) {
@@ -258,7 +264,8 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
       try {
         setPaymentState({ status: "building" });
-        const memoText = `StellarStar|${tripName}`.slice(0, 24);
+        const memoText = tripName;
+        const expectedMemo = buildExpectedPaymentMemo(memoText);
         const { xdr } = await buildPaymentTransaction({
           sourcePublicKey:      publicKey,
           destinationPublicKey: payerWalletAddress,
@@ -286,16 +293,17 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             expectedSource: publicKey,
             expectedDestination: payerWalletAddress,
             expectedAmountXlm: totalAmountXlm,
+            expectedMemo,
           });
 
           if (!verifyResult.valid) {
             onChainError = verifyResult.error ?? "Invalid payment transaction on network.";
-            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts);
+            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
           } else {
             const poolCheck = await precheckPoolBalance(publicKey, publicKey, totalAmountXlm);
             if (!poolCheck.ok) {
               onChainError = poolCheck.error ?? "Pool balance is too low to record this settlement on-chain.";
-              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts);
+              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
             } else {
               setPaymentState({ status: "recording", step: "simulating" });
               const contractResult = await recordNetSettlementOnChain({
@@ -312,7 +320,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
                 loadPoolBalance();
               } else {
                 onChainError = contractResult.error ?? "On-chain recording failed.";
-                buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts);
+                buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmountXlm, mappedDebts, memoText);
               }
             }
           }

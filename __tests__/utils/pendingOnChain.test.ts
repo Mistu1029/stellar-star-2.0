@@ -19,6 +19,7 @@ function mkRecord(overrides: Partial<PendingOnChainRecord> = {}): PendingOnChain
     expenseId: "exp-1",
     payerPublicKey: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
     amountXlm: "2.0000000",
+    memoText: "Dinner|Alice",
     txHash: "tx-hash-1",
     ledger: 100,
     ...overrides,
