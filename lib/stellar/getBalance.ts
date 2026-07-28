@@ -1,11 +1,12 @@
 import { HORIZON_URL } from "@/lib/utils/constants";
 
-export async function getXLMBalance(publicKey: string): Promise<string> {
+export async function getXLMBalance(publicKey: string, signal?: AbortSignal): Promise<string> {
   const url = `${HORIZON_URL}/accounts/${publicKey}?_ts=${Date.now()}`;
 
   const res = await fetch(url, {
     cache: "no-store",
     headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+    signal,
   });
 
   if (!res.ok) {
