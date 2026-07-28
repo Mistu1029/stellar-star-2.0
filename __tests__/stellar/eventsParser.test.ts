@@ -1,5 +1,26 @@
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
-import { parsePaymentEvent } from "@/lib/stellar/events";
+import { fetchContractEvents, parsePaymentEvent } from "@/lib/stellar/events";
+import { sorobanServer } from "@/lib/stellar/soroban";
+
+jest.mock("@/lib/stellar/soroban", () => ({
+  sorobanServer: {
+    getEvents: jest.fn(),
+    getLatestLedger: jest.fn(),
+  },
+}));
+
+function rawPaymentEvent(index: number) {
+  return {
+    ledger: 100 + index,
+    ledgerClosedAt: "2024-01-01T00:00:00Z",
+    txHash: `tx-${index}`,
+    topic: [
+      xdr.ScVal.scvSymbol("pmt_rec"),
+      nativeToScVal("trip-1", { type: "string" }),
+    ],
+    value: nativeToScVal([`exp-${index}`, "GAAAA", String(index)]),
+  };
+}
 
 describe("parsePaymentEvent", () => {
   it("parses legacy tuple event payloads", () => {
@@ -101,5 +122,55 @@ describe("parsePaymentEvent", () => {
       member: "GAAAA",
       amountStroops: "3500000",
     }));
+  });
+});
+
+describe("fetchContractEvents", () => {
+  beforeEach(() => {
+    jest.mocked(sorobanServer.getEvents).mockReset();
+    jest.mocked(sorobanServer.getLatestLedger).mockReset();
+  });
+
+  it("fetches and parses additional pages when a page reaches the limit", async () => {
+    const firstPage = Array.from({ length: 200 }, (_, index) => rawPaymentEvent(index));
+    const secondPage = [rawPaymentEvent(200), rawPaymentEvent(201)];
+
+    jest.mocked(sorobanServer.getEvents)
+      .mockResolvedValueOnce({
+        events: firstPage,
+        latestLedger: 500,
+        cursor: "page-1",
+      } as any)
+      .mockResolvedValueOnce({
+        events: secondPage,
+        latestLedger: 501,
+        cursor: "page-2",
+      } as any);
+
+    const result = await fetchContractEvents(42, "trip-1");
+
+    expect(result.events).toHaveLength(202);
+    expect(result.events[0]?.expenseId).toBe("exp-0");
+    expect(result.events[201]?.expenseId).toBe("exp-201");
+    expect(result.latestLedger).toBe(501);
+
+    expect(sorobanServer.getEvents).toHaveBeenCalledTimes(2);
+    expect(sorobanServer.getEvents).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        startLedger: 42,
+        pagination: { limit: 200 },
+      })
+    );
+    expect(sorobanServer.getEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.not.objectContaining({ startLedger: expect.anything() })
+    );
+    expect(sorobanServer.getEvents).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        pagination: { cursor: "page-1", limit: 200 },
+      })
+    );
   });
 });
