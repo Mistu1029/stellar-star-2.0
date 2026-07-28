@@ -10,6 +10,10 @@ interface UseBalanceResult {
   refresh: () => Promise<void>;
 }
 
+function isAbortError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "name" in err && err.name === "AbortError";
+}
+
 export function useBalance(publicKey: string | null): UseBalanceResult {
   const [balance, setBalance]   = useState<string | null>(null);
   const [isLoading, setLoading] = useState(false);
@@ -28,14 +32,21 @@ export function useBalance(publicKey: string | null): UseBalanceResult {
     setLoading(true);
     setError(null);
 
+    const controller = abortRef.current;
+
     try {
-      const bal = await getXLMBalance(publicKey);
+      const bal = await getXLMBalance(publicKey, controller?.signal);
+      if (controller?.signal.aborted) return;
       setBalance(bal);
     } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to fetch balance.";
       setError(msg);
       setBalance(null);
     } finally {
+      if (controller?.signal.aborted) return;
       setLoading(false);
     }
   }, [publicKey]);
