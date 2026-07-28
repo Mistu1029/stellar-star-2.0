@@ -71,6 +71,27 @@ async function loadAccount(publicKey: string): Promise<Account> {
   return new Account(publicKey, data.sequence);
 }
 
+/**
+ * Resolves a transaction source for read-only Soroban simulations.
+ * Unfunded accounts are not on Horizon (404); use sequence "0" so status queries still work.
+ */
+async function accountForReadOnlySimulation(publicKey: string): Promise<Account> {
+  const res = await fetch(
+    `${HORIZON_URL}/accounts/${publicKey}?_ts=${Date.now()`,
+    { cache: "no-store", headers: { "Cache-Control": "no-cache" } }
+  );
+  if (res.status === 404) {
+    return new Account(publicKey, "0");
+  }
+  if (!res.ok) {
+    throw new Error(
+      `Failed to load Stellar account (${res.status}). Verify your address is funded on testnet.`
+    );
+  }
+  const data = (await res.json()) as { sequence: string };
+  return new Account(publicKey, data.sequence);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -457,7 +478,7 @@ export async function getContractPayments(
   }
 
   try {
-    const account  = await loadAccount(callerPublicKey);
+    const account  = await accountForReadOnlySimulation(callerPublicKey);
     const contract = new Contract(CONTRACT_ID);
 
     const tx = new TransactionBuilder(account, {
@@ -519,7 +540,7 @@ export async function checkIsPaid(
   }
 
   try {
-    const account  = await loadAccount(callerPublicKey);
+    const account  = await accountForReadOnlySimulation(callerPublicKey);
     const contract = new Contract(CONTRACT_ID);
 
     const tx = new TransactionBuilder(account, {

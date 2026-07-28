@@ -1,0 +1,136 @@
+import { nativeToScVal } from "@stellar/stellar-sdk";
+import { checkIsPaid, getContractPayments } from "@/lib/stellar/contract";
+import { sorobanServer } from "@/lib/stellar/soroban";
+import { HORIZON_URL } from "@/lib/utils/constants";
+
+jest.mock("@/lib/stellar/soroban", () => ({
+  sorobanServer: {
+    simulateTransaction: jest.fn(),
+  },
+}));
+
+const UNFUNDED_CALLER =
+  "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const FUNDED_SEQUENCE = "42";
+
+function horizonAccountResponse(sequence: string) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ sequence }),
+  };
+}
+
+function horizonNotFoundResponse() {
+  return {
+    ok: false,
+    status: 404,
+    json: async () => ({}),
+  };
+}
+
+function simulationSuccess(retval: ReturnType<typeof nativeToScVal>) {
+  return {
+    id: "sim-1",
+    latestLedger: 1,
+    events: [],
+    results: [],
+    transactionData: "",
+    minResourceFee: "0",
+    cost: { cpuInsns: "0", memBytes: "0" },
+    result: {
+      auth: [],
+      retval,
+    },
+  };
+}
+
+describe("read-only contract queries with unfunded caller", () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    jest.mocked(sorobanServer.simulateTransaction).mockReset();
+    global.fetch = jest.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("checkIsPaid simulates with sequence 0 when Horizon returns 404", async () => {
+    jest.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith(`${HORIZON_URL}/accounts/${UNFUNDED_CALLER}`)) {
+        return horizonNotFoundResponse() as Response;
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    jest.mocked(sorobanServer.simulateTransaction).mockImplementation(async (tx) => {
+      expect(tx.source).toBe(UNFUNDED_CALLER);
+      expect(tx.sequence).toBe("0");
+      return simulationSuccess(nativeToScVal(false)) as Awaited<
+        ReturnType<typeof sorobanServer.simulateTransaction>
+      >;
+    });
+
+    const result = await checkIsPaid(UNFUNDED_CALLER, "exp-1", UNFUNDED_CALLER);
+
+    expect(result).toEqual({ paid: false, success: true });
+    expect(sorobanServer.simulateTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("getContractPayments simulates with sequence 0 when Horizon returns 404", async () => {
+    jest.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith(`${HORIZON_URL}/accounts/${UNFUNDED_CALLER}`)) {
+        return horizonNotFoundResponse() as Response;
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    jest.mocked(sorobanServer.simulateTransaction).mockImplementation(async (tx) => {
+      expect(tx.source).toBe(UNFUNDED_CALLER);
+      expect(tx.sequence).toBe("0");
+      return simulationSuccess(
+        nativeToScVal([
+          {
+            expense_id: "exp-1",
+            payer: UNFUNDED_CALLER,
+            member: UNFUNDED_CALLER,
+            amount: 1_000_000n,
+            tx_hash: "abc",
+            timestamp: 1n,
+          },
+        ])
+      ) as Awaited<ReturnType<typeof sorobanServer.simulateTransaction>>;
+    });
+
+    const result = await getContractPayments(UNFUNDED_CALLER, "trip-1");
+
+    expect(result.success).toBe(true);
+    expect(result.payments).toHaveLength(1);
+    expect(result.payments[0]?.expenseId).toBe("exp-1");
+  });
+
+  it("checkIsPaid still uses Horizon sequence for funded callers", async () => {
+    jest.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith(`${HORIZON_URL}/accounts/${UNFUNDED_CALLER}`)) {
+        return horizonAccountResponse(FUNDED_SEQUENCE) as Response;
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    jest.mocked(sorobanServer.simulateTransaction).mockImplementation(async (tx) => {
+      expect(tx.sequence).toBe(FUNDED_SEQUENCE);
+      return simulationSuccess(nativeToScVal(true)) as Awaited<
+        ReturnType<typeof sorobanServer.simulateTransaction>
+      >;
+    });
+
+    const result = await checkIsPaid(UNFUNDED_CALLER, "exp-2", UNFUNDED_CALLER);
+
+    expect(result).toEqual({ paid: true, success: true });
+  });
+});
