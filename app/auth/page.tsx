@@ -10,7 +10,7 @@ import { useWalletContext } from "@/context/WalletContext";
 
 export default function AuthPage() {
   const { signUp, signIn, isLoading } = useAuth();
-  const { publicKey, isConnected, connect } = useWalletContext();
+  const { publicKey, isConnected, connect, disconnect } = useWalletContext();
   const [displayName, setDisplayName] = useState("");
   const [isSignUpMode, setIsSignUpMode] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +76,7 @@ export default function AuthPage() {
       onDisplayNameChange={handleDisplayNameChange}
       onModeChange={handleModeChange}
       onSubmit={handleSubmit}
+      onDisconnect={disconnect}
     />
   );
 }
