@@ -4,6 +4,7 @@ import { CONTRACT_ID } from "@/lib/utils/constants";
 import type { ContractPaymentEvent } from "@/types/contract";
 
 const LOOKBACK_LEDGERS = 600;
+const EVENT_PAGE_LIMIT = 200;
 
 type RawEventLike = {
   ledger?: number;
@@ -11,6 +12,12 @@ type RawEventLike = {
   txHash?: string;
   topic?: unknown[];
   value?: unknown;
+};
+
+type EventsPage = {
+  events?: unknown[];
+  latestLedger?: number;
+  cursor?: string;
 };
 
 export function buildPaymentEventKey(event: ContractPaymentEvent): string {
@@ -80,24 +87,41 @@ export async function fetchContractEvents(
       ? nativeToScVal(tripId, { type: "string" }).toXDR("base64")
       : "*";
 
-    const response = await (server as any).getEvents({
-      startLedger: fromLedger,
-      filters: [
-        {
-          type:        "contract",
-          contractIds: [CONTRACT_ID],
-          topics:      [[symbolXdr, tripTopicXdr]],
+    const filters = [
+      {
+        type:        "contract",
+        contractIds: [CONTRACT_ID],
+        topics:      [[symbolXdr, tripTopicXdr]],
+      },
+    ];
+
+    const rawEvents: unknown[] = [];
+    let latestLedger = fromLedger;
+    let cursor: string | undefined;
+
+    do {
+      const response = await (server as any).getEvents({
+        ...(cursor ? {} : { startLedger: fromLedger }),
+        filters,
+        pagination: {
+          ...(cursor ? { cursor } : {}),
+          limit: EVENT_PAGE_LIMIT,
         },
-      ],
-      limit: 200,
-    }) as any;
+      }) as EventsPage;
 
-    const latestLedger: number =
-      typeof response?.latestLedger === "number" && response.latestLedger > fromLedger
-        ? response.latestLedger
-        : fromLedger;
+      const pageEvents = Array.isArray(response?.events) ? response.events : [];
+      rawEvents.push(...pageEvents);
 
-    const rawEvents: any[] = Array.isArray(response?.events) ? response.events : [];
+      if (typeof response?.latestLedger === "number" && response.latestLedger > latestLedger) {
+        latestLedger = response.latestLedger;
+      }
+
+      const nextCursor = response?.cursor;
+      cursor =
+        pageEvents.length === EVENT_PAGE_LIMIT && nextCursor && nextCursor !== cursor
+          ? nextCursor
+          : undefined;
+    } while (cursor);
 
     const events: ContractPaymentEvent[] = rawEvents
       .map((ev: any) => parsePaymentEvent(ev))
