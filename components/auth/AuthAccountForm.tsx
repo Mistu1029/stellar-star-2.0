@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, User, Wallet } from "lucide-react";
+import { ArrowRight, LogOut, User, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -16,6 +16,7 @@ interface AuthAccountFormProps {
   onDisplayNameChange: (value: string) => void;
   onModeChange: (isSignUpMode: boolean) => void;
   onSubmit: (event: FormEvent) => void;
+  onDisconnect?: () => void;
 }
 
 export function AuthAccountForm({
@@ -28,6 +29,7 @@ export function AuthAccountForm({
   onDisplayNameChange,
   onModeChange,
   onSubmit,
+  onDisconnect,
 }: AuthAccountFormProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F6F6F6] px-4 py-12">
@@ -47,7 +49,7 @@ export function AuthAccountForm({
           </p>
         </div>
 
-        <ConnectedWallet publicKey={publicKey} />
+        <ConnectedWallet publicKey={publicKey} onDisconnect={onDisconnect} />
         <AuthModeToggle isSignUpMode={isSignUpMode} onModeChange={onModeChange} />
 
         <form onSubmit={onSubmit} className="space-y-5">
@@ -107,7 +109,7 @@ export function AuthAccountForm({
   );
 }
 
-function ConnectedWallet({ publicKey }: { publicKey?: string | null }) {
+function ConnectedWallet({ publicKey, onDisconnect }: { publicKey?: string | null; onDisconnect?: () => void }) {
   return (
     <div className="mb-6 p-5 bg-gradient-to-br from-[#F6F6F6] to-[#FAFAFA] rounded-2xl border border-[#E5E5E5]">
       <div className="flex items-center gap-3 mb-2">
@@ -119,6 +121,16 @@ function ConnectedWallet({ publicKey }: { publicKey?: string | null }) {
       <p className="text-sm font-mono text-[#0F0F14] break-all bg-white px-3 py-2 rounded-lg">
         {publicKey}
       </p>
+      {onDisconnect && (
+        <Button
+          type="button"
+          onClick={onDisconnect}
+          className="mt-4 w-full border border-[#E5E5E5] bg-white text-[#0F0F14] hover:bg-[#F6F6F6] h-11 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+        >
+          <LogOut size={16} />
+          Disconnect Wallet
+        </Button>
+      )}
     </div>
   );
 }

@@ -99,7 +99,7 @@ export async function fetchContractEvents(
     let latestLedger = fromLedger;
     let cursor: string | undefined;
 
-    do {
+    while (true) {
       const response = await (server as any).getEvents({
         ...(cursor ? {} : { startLedger: fromLedger }),
         filters,
@@ -116,12 +116,13 @@ export async function fetchContractEvents(
         latestLedger = response.latestLedger;
       }
 
-      const nextCursor = response?.cursor;
-      cursor =
-        pageEvents.length === EVENT_PAGE_LIMIT && nextCursor && nextCursor !== cursor
-          ? nextCursor
-          : undefined;
-    } while (cursor);
+      const nextCursor = typeof response?.cursor === "string" ? response.cursor : undefined;
+      const shouldContinue = pageEvents.length === EVENT_PAGE_LIMIT && Boolean(nextCursor);
+
+      if (!shouldContinue) break;
+
+      cursor = nextCursor;
+    }
 
     const events: ContractPaymentEvent[] = rawEvents
       .map((ev: any) => parsePaymentEvent(ev))
