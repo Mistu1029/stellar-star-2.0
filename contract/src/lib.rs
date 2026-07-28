@@ -1,4 +1,4 @@
-﻿#![no_std]
+#![no_std]
 
 pub mod pool;
 
@@ -274,8 +274,9 @@ mod test {
             let admin = Address::generate(&$env);
             let settlement_address = settlement_contract_id.clone();
             let pool_address = pool_contract_id.clone();
+            let token_addr = Address::generate(&$env);
 
-            $pool_client.init_pool(&admin, &settlement_address);
+            $pool_client.init_pool(&admin, &settlement_address, &token_addr);
             $client.init(&admin, &pool_address);
         };
     }
