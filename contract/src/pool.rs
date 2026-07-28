@@ -1,6 +1,6 @@
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short,
-    Address, Env,
+    token, Address, Env,
 };
 
 #[contracterror]
@@ -23,6 +23,7 @@ pub enum PoolError {
 pub struct PoolConfig {
     pub admin: Address,
     pub settlement_contract: Address,
+    pub token: Address,
 }
 
 #[contracttype]
@@ -62,7 +63,7 @@ pub struct SettlementPoolContract;
 
 #[contractimpl]
 impl SettlementPoolContract {
-    pub fn init_pool(env: Env, admin: Address, settlement_contract: Address) {
+    pub fn init_pool(env: Env, admin: Address, settlement_contract: Address, token: Address) {
         if env.storage().instance().has(&PoolDataKey::Config) {
             panic_with_error!(&env, PoolError::AlreadyInitialized);
         }
@@ -76,6 +77,7 @@ impl SettlementPoolContract {
         let cfg = PoolConfig {
             admin: admin.clone(),
             settlement_contract: settlement_contract.clone(),
+            token: token.clone(),
         };
 
         env.storage().instance().set(&PoolDataKey::Version, &CONTRACT_VERSION);
@@ -178,7 +180,7 @@ impl SettlementPoolContract {
         }
 
         // Ensure pool is initialized before allowing balance operations.
-        let _cfg = Self::get_config(env.clone());
+        let cfg = Self::get_config(env.clone());
 
         from.require_auth();
 
@@ -196,6 +198,11 @@ impl SettlementPoolContract {
         env.storage()
             .persistent()
             .extend_ttl(&key, STORAGE_BUMP_THRESHOLD, STORAGE_BUMP_AMOUNT);
+
+        // Transfer tokens from the contract back to the user's wallet.
+        let contract_address = env.current_contract_address();
+        let token_client = token::TokenClient::new(&env, &cfg.token);
+        token_client.transfer(&contract_address, &from, &amount);
 
         env.events().publish(
             (symbol_short!("pool_wdr"), from.clone()),
@@ -239,6 +246,7 @@ mod test {
             let $client = SettlementPoolContractClient::new(&$env, &contract_id);
             let $admin = Address::generate(&$env);
             let $settlement = Address::generate(&$env);
+            let token_addr = Address::generate(&$env);
         };
     }
 
@@ -246,7 +254,7 @@ mod test {
     fn test_init_and_get_config() {
         setup_pool!(env, client, admin, settlement_contract);
 
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
         let cfg = client.get_config();
 
         assert_eq!(cfg.admin, admin);
@@ -258,8 +266,8 @@ mod test {
     fn test_double_init_rejected() {
         setup_pool!(env, client, admin, settlement_contract);
 
-        client.init_pool(&admin, &settlement_contract);
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
     }
 
     #[test]
@@ -267,7 +275,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &1_500_000_i128);
         assert_eq!(client.balance_of(&member), 1_500_000_i128);
@@ -278,7 +286,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &2_000_000_i128);
         client.withdraw(&member, &700_000_i128);
@@ -292,7 +300,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &100_000_i128);
         client.withdraw(&member, &200_000_i128);
@@ -303,7 +311,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let next_contract = Address::generate(&env);
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
         client.set_settlement_contract(&next_contract);
 
         let cfg = client.get_config();
@@ -319,7 +327,8 @@ mod test {
         let client = SettlementPoolContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
-        client.init_pool(&admin, &admin);
+        let token = Address::generate(&env);
+        client.init_pool(&admin, &admin, &token);
     }
 
     #[test]
@@ -328,7 +337,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
         let member = Address::generate(&env);
 
-        client.init_pool(&admin, &settlement_contract);
+        client.init_pool(&admin, &settlement_contract, &token_addr);
         client.deposit(&member, &(MAX_AMOUNT_STROOPS + 1));
     }
 
