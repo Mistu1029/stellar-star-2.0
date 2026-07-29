@@ -351,6 +351,20 @@ npm test -- --runInBand
 npm run test:coverage
 ```
 
+**Run browser end-to-end tests (Playwright):**
+
+```bash
+npm run test:e2e            # headless, all projects (desktop + mobile viewports)
+npm run test:e2e:ui         # interactive UI mode
+npx playwright test --project=chromium   # single browser, fastest (what CI runs)
+```
+
+Playwright starts the dev server itself and covers landing, auth prompt,
+dashboard, expenses, trips, and trip detail pages plus two mobile-viewport
+(Pixel 5 / iPhone 12) tests - see `e2e/e2e.spec.ts`. No real wallet or
+Supabase project is needed; it asserts unauthenticated-state UI and
+responsive layout. Full details in `docs/RUNBOOK.md`.
+
 **Verify proof assets & docs links (issue #73):**
 
 ```bash

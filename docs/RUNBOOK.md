@@ -43,6 +43,25 @@ Run contract tests:
 
 - `cd contract && cargo test`
 
+### 3.1 End-to-End Tests (Playwright)
+
+Browser-level coverage for the main user journeys (landing, auth prompt,
+dashboard, expenses, trips, trip detail, plus mobile viewports) lives in
+`e2e/e2e.spec.ts`. Playwright starts the Next.js dev server itself, so no
+manual `npm run dev` step is needed first.
+
+- `npm run test:e2e` - headless run across all configured projects (desktop
+  Chrome/Firefox/Safari plus Mobile Chrome/Mobile Safari device emulation)
+- `npm run test:e2e:ui` - interactive UI mode for debugging a single test
+- `npx playwright test --project=chromium` - fastest single-browser run
+  (what CI runs)
+- `npm run test:e2e:report` - open the HTML report from the last run
+
+No real Supabase project or wallet extension is required to run this suite:
+it only asserts unauthenticated-state UI (wallet-connect prompts, auth
+guards, page structure) and responsive layout, using the placeholder
+Supabase env vars already set in `playwright.config.ts`'s `webServer`.
+
 ## 4. Contract Deployment (Testnet)
 
 Run the automated contract deployment script:

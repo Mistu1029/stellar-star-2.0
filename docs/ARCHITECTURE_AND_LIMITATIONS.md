@@ -36,7 +36,11 @@ Stellar-star uses:
 
 ## Recommended Future Improvements
 
-- Add automated e2e tests (Playwright) with mobile viewport assertions.
+- Extend Playwright coverage to authenticated flows (creating expenses, trip
+  detail with real data, QR display) - the current suite covers landing,
+  auth prompt, dashboard, expenses, trips, and trip detail pages plus mobile
+  viewports, but only the unauthenticated/guard state, since there is no
+  wallet-signing mock yet. See `docs/RUNBOOK.md` for how to run the suite.
 - Add a script to validate README proof links are live.
 - Add an automated checklist CI job that verifies required docs/sections exist.
 - Introduce token/native-asset backed pool settlement model (transfer in/out) for stronger economic guarantees.
