@@ -77,16 +77,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Signature verification failed" }, { status: 401 });
     }
 
-    // 4. Query user database to fetch user's UUID for sub claim (if they exist)
+    // 4. Query user database to fetch user's UUID for sub claim (if they exist).
+    // Non-fatal: a transient/unreachable database should not block issuing a
+    // session for a wallet signature we already verified cryptographically -
+    // it just falls back to using the wallet address as the subject claim.
     let userId = address; // fallback sub
     if (supabase) {
-      const { data } = await supabase
-        .from("users")
-        .select("id")
-        .eq("wallet_address", address)
-        .single();
-      if (data) {
-        userId = data.id;
+      try {
+        const { data } = await supabase
+          .from("users")
+          .select("id")
+          .eq("wallet_address", address)
+          .single();
+        if (data) {
+          userId = data.id;
+        }
+      } catch {
+        // proceed with fallback sub
       }
     }
 
