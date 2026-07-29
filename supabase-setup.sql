@@ -159,7 +159,9 @@ CREATE INDEX IF NOT EXISTS idx_trips_settled ON trips (settled);
 -- ============================================================================
 -- This section enables RLS and creates wallet-based authentication policies
 -- Members can only see/edit expenses/trips they're part of
--- Uses custom header 'x-wallet-address' passed from the app
+-- Identity comes from the verified 'wallet_address' claim inside the request's
+-- signed JWT (request.jwt.claims), issued only after the server verifies a
+-- Stellar wallet signature - never from a client-supplied header.
 -- ============================================================================
 
 -- Enable RLS on all tables (required before creating policies)

@@ -10,6 +10,9 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
 if (!process.env.NEXT_PUBLIC_CONTRACT_ID) {
   process.env.NEXT_PUBLIC_CONTRACT_ID = "CTestContractIdForJest";
 }
+if (!process.env.SUPABASE_JWT_SECRET) {
+  process.env.SUPABASE_JWT_SECRET = "test-only-jwt-secret-not-used-in-production";
+}
 
 if (!(global as any).TextEncoder) {
   (global as any).TextEncoder = TextEncoder;

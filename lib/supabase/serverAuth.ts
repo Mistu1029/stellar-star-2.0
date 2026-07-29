@@ -1,10 +1,24 @@
 import crypto from "crypto";
 
-const JWT_SECRET = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || "super-secret-jwt-key-with-at-least-32-characters-long";
+/**
+ * Lazily resolved (not cached at module load) so a missing secret fails the
+ * request that needs it rather than silently falling back to a value that is
+ * public in this repo's history - a shared fallback would let anyone forge
+ * session JWTs with an arbitrary wallet_address claim.
+ */
+function getJwtSecret(): string {
+  const secret = process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      "SUPABASE_JWT_SECRET (or JWT_SECRET) is not configured. Set it to the Supabase project's JWT signing secret."
+    );
+  }
+  return secret;
+}
 
 export function generateChallengeSignature(address: string, nonce: string, expiration: number): string {
   const data = `${address}:${nonce}:${expiration}`;
-  return crypto.createHmac("sha256", JWT_SECRET).update(data).digest("hex");
+  return crypto.createHmac("sha256", getJwtSecret()).update(data).digest("hex");
 }
 
 function base64url(buf: Buffer): string {
@@ -29,9 +43,9 @@ export function signSupabaseJwt(payload: object, expiresInSeconds: number = 3600
   
   const encodedHeader = base64url(Buffer.from(JSON.stringify(header)));
   const encodedPayload = base64url(Buffer.from(JSON.stringify(fullPayload)));
-  
+
   const signatureInput = `${encodedHeader}.${encodedPayload}`;
-  const signature = crypto.createHmac("sha256", JWT_SECRET).update(signatureInput).digest();
+  const signature = crypto.createHmac("sha256", getJwtSecret()).update(signatureInput).digest();
   const encodedSignature = base64url(signature);
   
   return `${signatureInput}.${encodedSignature}`;
