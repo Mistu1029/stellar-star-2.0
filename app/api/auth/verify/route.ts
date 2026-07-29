@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TransactionBuilder, Keypair } from "@stellar/stellar-sdk";
+import crypto from "crypto";
 import { NETWORK_PASSPHRASE } from "@/lib/utils/constants";
 import { generateChallengeSignature, signSupabaseJwt } from "@/lib/supabase/serverAuth";
 import { supabase } from "@/lib/supabase/client";
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     // 1. Re-calculate and verify challenge signature (HMAC) to ensure it wasn't forged
     const expectedSignature = generateChallengeSignature(address, nonce, expiration);
-    if (signature !== expectedSignature) {
+    if (typeof signature !== "string" || !timingSafeStringEqual(signature, expectedSignature)) {
       return NextResponse.json({ error: "Challenge verification failed (signature mismatch)" }, { status: 400 });
     }
 
@@ -56,9 +64,10 @@ export async function POST(request: NextRequest) {
 
     // Verify client signature
     const keypair = Keypair.fromPublicKey(address);
+    const txHash = tx.hash();
     const hasValidSignature = tx.signatures.some(sig => {
       try {
-        return keypair.verify(tx.signatureBase(), sig.signature());
+        return keypair.verify(txHash, sig.signature());
       } catch {
         return false;
       }
