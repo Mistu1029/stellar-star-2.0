@@ -36,6 +36,18 @@ export interface SupportedWallet {
   isInstalled: () => Promise<boolean>;
 }
 
+/**
+ * Test-only wallet bypass for Playwright e2e runs. Only active when the app
+ * is served with NEXT_PUBLIC_E2E_TEST_MODE=true (set in playwright.config.ts)
+ * AND a test has injected window.__E2E_WALLET__ - never reachable in a normal
+ * production build.
+ */
+function e2eTestWallet(): { address: string } | null {
+  if (typeof window === "undefined") return null;
+  if (process.env.NEXT_PUBLIC_E2E_TEST_MODE !== "true") return null;
+  return (window as unknown as { __E2E_WALLET__?: { address: string } }).__E2E_WALLET__ ?? null;
+}
+
 const SUPPORTED_WALLETS: SupportedWallet[] = [
   {
     id: FREIGHTER_ID,
@@ -43,6 +55,7 @@ const SUPPORTED_WALLETS: SupportedWallet[] = [
     logoUrl:    "/wallets/freighter.svg",
     installUrl: "https://www.freighter.app/",
     isInstalled: async () => {
+      if (e2eTestWallet()) return true;
       if (typeof window === "undefined") return false;
       try {
         const result = await isConnected();
@@ -331,6 +344,9 @@ export class StellarWalletsKit {
   }
 
   private async freighterGetAddress(): Promise<GetAddressResult> {
+    const testWallet = e2eTestWallet();
+    if (testWallet) return { address: testWallet.address };
+
     const allowed = await isAllowed();
     if (!allowed.error && allowed.isAllowed) {
       const result = await freighterGetAddress();
@@ -372,6 +388,14 @@ export class StellarWalletsKit {
   }
 
   private async freighterSign(xdr: string, opts: SignTransactionOptions): Promise<SignTransactionResult> {
+    const testWallet = e2eTestWallet();
+    if (testWallet) {
+      const signedTxXdr = await (window as unknown as {
+        __E2E_WALLET__: { signXDR: (xdr: string) => Promise<string> };
+      }).__E2E_WALLET__.signXDR(xdr);
+      return { signedTxXdr };
+    }
+
     const passphrase = opts.networkPassphrase ?? this.network;
     const result = await freighterSignTransaction(xdr, { networkPassphrase: passphrase });
     if ("error" in result && result.error) {
