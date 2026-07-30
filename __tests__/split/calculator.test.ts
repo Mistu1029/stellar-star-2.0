@@ -115,17 +115,66 @@ describe("calculateSplit", () => {
 // ─── isValidXLMAmount ─────────────────────────────────────────────────────────
 
 describe("isValidXLMAmount", () => {
+  // ── Basic range validation (existing cases, unchanged) ────────────────────
   it.each([
-    ["1", true],
-    ["0.0000001", true],
+    ["1",         true],
+    ["0.0000001", true],   // 7 decimal places — the minimum valid stroop amount
     ["100000000", true],
-    ["0", false],
-    ["-1", false],
-    ["abc", false],
-    ["", false],
+    ["0",         false],
+    ["-1",        false],
+    ["abc",       false],
+    ["",          false],
     ["100000001", false],
   ])("isValidXLMAmount(%s) === %s", (input, expected) => {
     expect(isValidXLMAmount(input)).toBe(expected);
+  });
+
+  // ── Stroop precision boundary (new cases — issue #111) ────────────────────
+
+  // 0 decimal places — plain integers are always fine
+  it("accepts an integer amount (0 decimal places)", () => {
+    expect(isValidXLMAmount("10")).toBe(true);
+  });
+
+  // 7 decimal places — exactly at the stroop limit; must be accepted
+  it("accepts exactly 7 decimal places (stroop precision limit)", () => {
+    expect(isValidXLMAmount("10.1234567")).toBe(true);
+  });
+
+  it("accepts 0.0000001 — the smallest valid stroop amount (7 decimal places)", () => {
+    expect(isValidXLMAmount("0.0000001")).toBe(true);
+  });
+
+  it("accepts 1.0000000 — trailing zeros within 7 decimal places", () => {
+    expect(isValidXLMAmount("1.0000000")).toBe(true);
+  });
+
+  // 8 decimal places — one digit beyond the stroop limit; must be rejected
+  it("rejects 8 decimal places (beyond stroop precision)", () => {
+    expect(isValidXLMAmount("10.12345678")).toBe(false);
+  });
+
+  it("rejects 10.123456789 — the example from issue #111", () => {
+    expect(isValidXLMAmount("10.123456789")).toBe(false);
+  });
+
+  it("rejects 0.00000001 — 8 decimal places even though value is tiny", () => {
+    expect(isValidXLMAmount("0.00000001")).toBe(false);
+  });
+
+  it("rejects 1.00000000 — 8 decimal places even though trailing zeros", () => {
+    expect(isValidXLMAmount("1.00000000")).toBe(false);
+  });
+
+  // Edge cases around the precision check
+  it("accepts a value with exactly a dot but no decimals treated correctly", () => {
+    // "5." is parsed as 5 by parseFloat; dot index present but no trailing digits
+    expect(isValidXLMAmount("5.")).toBe(true);
+  });
+
+  it("strips leading/trailing whitespace before checking", () => {
+    expect(isValidXLMAmount("  10.5  ")).toBe(true);
+    expect(isValidXLMAmount("  10.12345678  ")).toBe(false);
   });
 });
 
