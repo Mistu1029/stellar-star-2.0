@@ -6,7 +6,7 @@ export async function getXLMBalance(publicKey: string, signal?: AbortSignal): Pr
   const res = await fetch(url, {
     cache: "no-store",
     headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
-    signal,
+    signal, // Pass the abort signal to the underlying fetch
   });
 
   if (!res.ok) {
