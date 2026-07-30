@@ -146,8 +146,13 @@ impl SettlementPoolContract {
         }
 
         // Pool credits are authenticated by the member depositing.
-        let _cfg = Self::get_config(env.clone());
+        let cfg = Self::get_config(env.clone());
         member.require_auth();
+
+        // Transfer tokens from the depositor to the pool contract.
+        let contract_address = env.current_contract_address();
+        let token_client = token::TokenClient::new(&env, &cfg.token);
+        token_client.transfer(&member, &contract_address, &amount);
 
         let key = PoolDataKey::Balance(member.clone());
         let current: i128 = env.storage().persistent().get(&key).unwrap_or(0_i128);
@@ -246,7 +251,8 @@ mod test {
             let $client = SettlementPoolContractClient::new(&$env, &contract_id);
             let $admin = Address::generate(&$env);
             let $settlement = Address::generate(&$env);
-            let token_addr = Address::generate(&$env);
+            let token_addr = $env.register_stellar_asset_contract($admin.clone());
+            let token_admin_client = token::StellarAssetClient::new(&$env, &token_addr);
         };
     }
 
@@ -275,6 +281,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
+        token_admin_client.mint(&member, &100_000_000_i128);
         client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &1_500_000_i128);
@@ -286,6 +293,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
+        token_admin_client.mint(&member, &100_000_000_i128);
         client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &2_000_000_i128);
@@ -300,6 +308,7 @@ mod test {
         setup_pool!(env, client, admin, settlement_contract);
 
         let member = Address::generate(&env);
+        token_admin_client.mint(&member, &100_000_000_i128);
         client.init_pool(&admin, &settlement_contract, &token_addr);
 
         client.deposit(&member, &100_000_i128);

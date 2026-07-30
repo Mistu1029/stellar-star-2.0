@@ -274,7 +274,8 @@ mod test {
             let admin = Address::generate(&$env);
             let settlement_address = settlement_contract_id.clone();
             let pool_address = pool_contract_id.clone();
-            let token_addr = Address::generate(&$env);
+            let token_addr = $env.register_stellar_asset_contract(admin.clone());
+            let token_admin_client = soroban_sdk::token::StellarAssetClient::new(&$env, &token_addr);
 
             $pool_client.init_pool(&admin, &settlement_address, &token_addr);
             $client.init(&admin, &pool_address);
@@ -291,6 +292,7 @@ mod test {
         let member     = Address::generate(&env);
         let tx_hash    = String::from_str(&env, "abc123def456");
 
+        token_admin_client.mint(&member, &100_000_000_i128);
         pool_client.deposit(&member, &10_000_000_i128);
 
         assert!(!client.is_paid(&expense_id, &member));
@@ -324,6 +326,8 @@ mod test {
         let tx_a       = String::from_str(&env, "hash_a");
         let tx_b       = String::from_str(&env, "hash_b");
 
+        token_admin_client.mint(&member_a, &100_000_000_i128);
+        token_admin_client.mint(&member_b, &100_000_000_i128);
         pool_client.deposit(&member_a, &5_000_000_i128);
         pool_client.deposit(&member_b, &7_500_000_i128);
 
@@ -347,6 +351,7 @@ mod test {
         let tx_1     = String::from_str(&env, "tx_001");
         let tx_2     = String::from_str(&env, "tx_002");
 
+        token_admin_client.mint(&member, &100_000_000_i128);
         pool_client.deposit(&member, &7_500_000_i128);
 
         client.record_payment(&trip_id, &exp_1, &payer, &member, &3_000_000_i128, &tx_1);
@@ -368,6 +373,7 @@ mod test {
         let member     = Address::generate(&env);
         let tx_hash    = String::from_str(&env, "hash_dup");
 
+        token_admin_client.mint(&member, &100_000_000_i128);
         pool_client.deposit(&member, &1_000_000_i128);
 
         client.record_payment(&trip_id, &expense_id, &payer, &member, &1_000_000_i128, &tx_hash);
@@ -459,6 +465,7 @@ mod test {
         let actor = Address::generate(&env);
         let tx_hash = String::from_str(&env, "hash-role");
 
+        token_admin_client.mint(&actor, &100_000_000_i128);
         pool_client.deposit(&actor, &1_000_000_i128);
         client.record_payment(&trip_id, &expense_id, &actor, &actor, &1_000_000_i128, &tx_hash);
     }
@@ -474,6 +481,7 @@ mod test {
         let member = Address::generate(&env);
         let tx_hash = String::from_str(&env, "hash-big");
 
+        token_admin_client.mint(&member, &(MAX_AMOUNT_STROOPS + 1));
         pool_client.deposit(&member, &(MAX_AMOUNT_STROOPS + 1));
         client.record_payment(&trip_id, &expense_id, &payer, &member, &(MAX_AMOUNT_STROOPS + 1), &tx_hash);
     }
