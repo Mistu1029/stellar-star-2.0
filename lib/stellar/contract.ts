@@ -77,7 +77,7 @@ async function loadAccount(publicKey: string): Promise<Account> {
  */
 async function accountForReadOnlySimulation(publicKey: string): Promise<Account> {
   const res = await fetch(
-    `${HORIZON_URL}/accounts/${publicKey}?_ts=${Date.now()`,
+    `${HORIZON_URL}/accounts/${publicKey}?_ts=${Date.now()}`,
     { cache: "no-store", headers: { "Cache-Control": "no-cache" } }
   );
   if (res.status === 404) {
