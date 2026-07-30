@@ -285,6 +285,23 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const deleteExpense = useCallback(async (id: string) => {
     try {
       const client = getClient();
+
+      // Clean up the expense ID from any trips that reference it
+      const { data: tripsWithExpense, error: tripFetchError } = await client
+        .from("trips")
+        .select("id, expense_ids")
+        .contains("expense_ids", [id]);
+
+      if (!tripFetchError && tripsWithExpense && tripsWithExpense.length > 0) {
+        for (const trip of tripsWithExpense) {
+          const newExpenseIds = (trip.expense_ids || []).filter((eid: string) => eid !== id);
+          await client
+            .from("trips")
+            .update({ expense_ids: newExpenseIds })
+            .eq("id", trip.id);
+        }
+      }
+
       const { error } = await client.from("expenses").delete().eq("id", id);
 
       if (error) throw error;
