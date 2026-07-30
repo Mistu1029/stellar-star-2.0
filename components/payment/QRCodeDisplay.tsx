@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { QrCode, Copy, Check, X } from "lucide-react";
 import { buildQRPaymentURI } from "@/lib/qr/generator";
 import type { QRPaymentData } from "@/lib/qr/generator";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
 
 // ─── Inline QR panel ──────────────────────────────────────────────────────────
 
@@ -17,14 +18,22 @@ interface QRCodeDisplayProps {
 
 export function QRCodeDisplay({ data, className }: QRCodeDisplayProps) {
   const [copied, setCopied] = useState(false);
+  const { error: toastError } = useToast();
   const uri = buildQRPaymentURI(data);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(uri).then(() => {
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(uri);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    } else {
+      toastError(
+        "Copy unavailable",
+        "Your browser doesn't support clipboard access. Please copy the link manually."
+      );
+    }
   };
+
 
   return (
     <div

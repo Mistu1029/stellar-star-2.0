@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, LogOut, User, LayoutDashboard, Receipt, Map, ChevronDown, Copy } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
 import { useAuth } from "@/context/AuthContext";
-import { cn, formatAddress } from "@/lib/utils";
+import { cn, formatAddress, copyToClipboard } from "@/lib/utils";
 import { StellarStarLogo } from "@/components/ui/Logo";
+import { useToast } from "@/components/ui/Toast";
 
 const navLinks = [
   { label: "Features", href: "/#features" },
@@ -23,6 +24,7 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { isConnected, publicKey, disconnect } = useWallet();
   const { user, isAuthenticated, signOut } = useAuth();
+  const { error: toastError } = useToast();
 
   const handleSignOut = () => {
     signOut();
@@ -31,11 +33,17 @@ export default function Header() {
     setMobileOpen(false);
   };
 
-  const copyAddress = () => {
-    if (publicKey) {
-      navigator.clipboard.writeText(publicKey);
+  const copyAddress = async () => {
+    if (!publicKey) return;
+    const ok = await copyToClipboard(publicKey);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+    } else {
+      toastError(
+        "Copy unavailable",
+        "Clipboard access is blocked in this context. Please copy the address manually."
+      );
     }
   };
 
