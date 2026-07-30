@@ -77,9 +77,20 @@ export function calculateSplit(
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
 export function isValidXLMAmount(value: string): boolean {
-  const n = parseFloat(value);
-  return !isNaN(n) && n > 0 && n <= 100_000_000;
+  const trimmed = value.trim();
+  const n = parseFloat(trimmed);
+  if (isNaN(n) || n <= 0 || n > 100_000_000) return false;
+
+  // Stellar amounts are denominated in stroops (1 XLM = 10_000_000 stroops),
+  // so the maximum meaningful precision is 7 decimal places.
+  // We count digits after the decimal point directly on the *input string*
+  // to avoid floating-point representation artefacts (e.g. 0.1 + 0.2).
+  const dotIndex = trimmed.indexOf(".");
+  if (dotIndex !== -1 && trimmed.length - dotIndex - 1 > 7) return false;
+
+  return true;
 }
+
 
 export function isValidStellarAddress(address: string): boolean {
   return StrKey.isValidEd25519PublicKey(address);

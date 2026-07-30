@@ -37,7 +37,7 @@ export function validateExpenseFormFields({
 
   if (!title.trim()) errors.title = "Title is required.";
   if (!totalAmount || !isValidXLMAmount(totalAmount)) {
-    errors.totalAmount = "Enter a valid XLM amount (e.g. 10.5).";
+    errors.totalAmount = "Enter a valid XLM amount (max 7 decimal places, e.g. 10.5).";
   }
 
   members.forEach((member, index) => {
