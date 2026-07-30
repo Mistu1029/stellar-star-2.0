@@ -7,6 +7,7 @@
  *  - qrcode.react  → QRCodeSVG renders as a plain <svg> to avoid canvas issues
  *  - framer-motion → AnimatePresence / motion.div stubbed for jsdom
  *  - navigator.clipboard → mocked write API to test copy behaviour
+ *  - @/components/ui/Toast → useToast mocked so error toasts can be asserted
  *
  * Tests cover:
  *  - Renders QR code SVG
@@ -15,6 +16,8 @@
  *  - Copy button text starts as "Copy payment link"
  *  - Clicking Copy writes the correct URI to the clipboard
  *  - Copy button text changes to "Copied!" after clicking
+ *  - Clipboard API unavailable → execCommand fallback is used
+ *  - Both APIs unavailable → error toast is shown
  *  - QRToggle: panel is hidden by default
  *  - QRToggle: clicking the trigger shows the QR panel
  *  - QRToggle: clicking the trigger again hides the panel
@@ -40,6 +43,12 @@ jest.mock("framer-motion", () => ({
   motion: {
     div: ({ children, ...rest }: any) => <div {...rest}>{children}</div>,
   },
+}));
+
+// Mock useToast so we can assert on error toasts without a real ToastProvider
+const mockToastError = jest.fn();
+jest.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ error: mockToastError, success: jest.fn(), info: jest.fn() }),
 }));
 
 // ─── Clipboard mock ───────────────────────────────────────────────────────────
@@ -156,7 +165,64 @@ describe("QRCodeDisplay — copy to clipboard", () => {
 
     expect(screen.getByText(/copy payment link/i)).toBeTruthy();
   });
+
+  it("uses the execCommand fallback when navigator.clipboard is undefined", async () => {
+    // Simulate an insecure context where navigator.clipboard is unavailable
+    Object.defineProperty(navigator, "clipboard", { writable: true, value: undefined });
+
+    // jsdom doesn't provide execCommand; define a mock that reports success
+    const execCommandMock = jest.fn().mockReturnValue(true);
+    Object.defineProperty(document, "execCommand", {
+      writable: true,
+      configurable: true,
+      value: execCommandMock,
+    });
+
+    render(<QRCodeDisplay data={testData} />);
+    const copyBtn = screen.getByText(/copy payment link/i).closest("button")!;
+
+    await act(async () => {
+      fireEvent.click(copyBtn);
+    });
+
+    expect(execCommandMock).toHaveBeenCalledWith("copy");
+    // Copied! feedback should still appear
+    expect(screen.getByText(/copied!/i)).toBeTruthy();
+
+    // Restore
+    Object.defineProperty(document, "execCommand", { writable: true, configurable: true, value: undefined });
+  });
+
+  it("shows an error toast when both clipboard API and execCommand are unavailable", async () => {
+    // No Clipboard API
+    Object.defineProperty(navigator, "clipboard", { writable: true, value: undefined });
+    // execCommand also returns false (failure)
+    const execCommandMock = jest.fn().mockReturnValue(false);
+    Object.defineProperty(document, "execCommand", {
+      writable: true,
+      configurable: true,
+      value: execCommandMock,
+    });
+
+    render(<QRCodeDisplay data={testData} />);
+    const copyBtn = screen.getByText(/copy payment link/i).closest("button")!;
+
+    await act(async () => {
+      fireEvent.click(copyBtn);
+    });
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      "Copy unavailable",
+      expect.stringContaining("clipboard")
+    );
+    // Button should NOT show "Copied!" — the copy failed
+    expect(screen.queryByText(/copied!/i)).toBeNull();
+
+    // Restore
+    Object.defineProperty(document, "execCommand", { writable: true, configurable: true, value: undefined });
+  });
 });
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 
