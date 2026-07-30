@@ -44,18 +44,29 @@ export function calculateCustomSplit(
 ): SplitShare[] {
   if (members.length === 0) return [];
 
+  const nonPayers = members.filter((m) => m.id !== paidByMemberId);
+  if (nonPayers.length === 0) return [];
+
   const totalWeight = members.reduce((s, m) => s + (m.weight ?? 1), 0);
+  if (totalWeight <= 0) return [];
+
+  const nonPayerWeight = nonPayers.reduce((s, m) => s + (m.weight ?? 1), 0);
+  const totalNonPayerTarget = (totalXLM * nonPayerWeight) / totalWeight;
   const shares: SplitShare[] = [];
 
-  members.forEach((m) => {
-    if (m.id === paidByMemberId) return;
+  nonPayers.forEach((m, i) => {
+    const isLast = i === nonPayers.length - 1;
+    const accumulated = shares.reduce((s, x) => s + parseFloat(x.amount), 0);
+    const weight = m.weight ?? 1;
+    const amount = isLast
+      ? totalNonPayerTarget - accumulated
+      : (totalXLM * weight) / totalWeight;
 
-    const proportion = (m.weight ?? 1) / totalWeight;
     shares.push({
       memberId: m.id,
       name: m.name,
       walletAddress: m.walletAddress,
-      amount: toXLM(totalXLM * proportion),
+      amount: toXLM(Math.max(0, amount)),
       paid: false,
     });
   });

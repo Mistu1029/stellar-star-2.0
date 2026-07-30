@@ -90,6 +90,51 @@ describe("calculateCustomSplit", () => {
   it("returns empty array when members is empty", () => {
     expect(calculateCustomSplit(100, [], "none")).toHaveLength(0);
   });
+
+  it("returns empty array when only the payer is present", () => {
+    const members: Member[] = [{ id: "p", name: "Payer", weight: 1 }];
+    expect(calculateCustomSplit(100, members, "p")).toHaveLength(0);
+  });
+
+  it("distributes rounding remainder to the final share for zero precision loss (3-way custom split with repeating decimals)", () => {
+    const totalXLM = 100;
+    const members: Member[] = [
+      { id: "p", name: "Payer", weight: 1 },
+      { id: "a", name: "Alice", weight: 1 },
+      { id: "b", name: "Bob", weight: 1 },
+    ];
+    // Each member has weight 1 out of 3. Non-payer target = 66.6666666666...
+    const shares = calculateCustomSplit(totalXLM, members, "p");
+    expect(shares).toHaveLength(2);
+
+    const nonPayerSum = shares.reduce((acc, s) => acc + parseFloat(s.amount), 0);
+    const payerShare = totalXLM * (1 / 3); // 33.3333333333...
+
+    // Sum of non-payer shares + payer share must equal total bill amount exactly at 7 decimal places
+    expect(nonPayerSum + payerShare).toBeCloseTo(totalXLM, 7);
+    // Specifically check that last share absorbed the rounding difference
+    expect(shares[0].amount).toBe("33.3333333");
+    expect(shares[1].amount).toBe("33.3333334");
+    expect(parseFloat(shares[0].amount) + parseFloat(shares[1].amount)).toBeCloseTo(66.6666667, 7);
+  });
+
+  it("ensures zero-loss precision when total weight produces non-terminating decimals (e.g. weights 1:2:4, total bill 100)", () => {
+    const totalXLM = 100;
+    const members: Member[] = [
+      { id: "p", name: "Payer", weight: 1 },
+      { id: "a", name: "Alice", weight: 2 },
+      { id: "b", name: "Bob", weight: 4 },
+    ];
+    // totalWeight = 7. Payer share = 1/7 * 100 = 14.2857142857...
+    // Non-payer target = 6/7 * 100 = 85.7142857142...
+    const shares = calculateCustomSplit(totalXLM, members, "p");
+
+    const sumNonPayers = shares.reduce((acc, s) => acc + parseFloat(s.amount), 0);
+    const payerAmount = (totalXLM * 1) / 7;
+
+    // Total bill must match exact sum
+    expect(sumNonPayers + payerAmount).toBeCloseTo(totalXLM, 7);
+  });
 });
 
 // ─── calculateSplit dispatcher ────────────────────────────────────────────────

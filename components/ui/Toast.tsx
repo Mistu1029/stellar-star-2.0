@@ -36,10 +36,16 @@ const ToastContext = createContext<ToastContextType | null>(null);
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+const defaultToastFallback: ToastContextType = {
+  toast: () => {},
+  success: () => {},
+  error: () => {},
+  info: () => {},
+};
+
 export function useToast() {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used within <ToastProvider />");
-  return ctx;
+  return ctx ?? defaultToastFallback;
 }
 
 // ─── Individual Toast Card ────────────────────────────────────────────────────
