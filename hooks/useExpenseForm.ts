@@ -7,8 +7,8 @@ import {
   calculateSplit,
   findDuplicateWalletErrors,
   isValidStellarAddress,
-  isValidXLMAmount,
 } from "@/lib/split/calculator";
+import { validateAmount } from "@/lib/expense/validation";
 import type { Expense, Member, SplitMode } from "@/types/expense";
 import { fetchExchangeRate, describeAge } from "@/lib/fx/quote";
 
@@ -39,10 +39,10 @@ export function validateExpenseFormFields({
   const errors: Record<string, string> = {};
 
   if (!title.trim()) errors.title = "Title is required.";
-  if (!totalAmount || Number.isNaN(parseFloat(totalAmount)) || parseFloat(totalAmount) <= 0) {
-    errors.totalAmount = `Enter a valid ${currency} amount.`;
-  } else if (currency === "XLM" && !isValidXLMAmount(totalAmount)) {
-    errors.totalAmount = "Enter a valid XLM amount (max 7 decimal places, e.g. 10.5).";
+
+  const amountError = validateAmount(totalAmount, currency);
+  if (amountError) {
+    errors.totalAmount = amountError;
   }
 
   members.forEach((member, index) => {
