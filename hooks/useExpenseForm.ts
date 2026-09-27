@@ -220,8 +220,14 @@ export function useExpenseForm({
         setSubmitting(false);
       }
     },
+    // `currency` and `toastInfo` are both read in the body above and belong
+    // here. Omitting `currency` was a live bug, not just a lint gap: the
+    // callback closed over "XLM" from the first render, so switching the
+    // dropdown to USD or INR and submitting skipped the conversion branch
+    // entirely and persisted the typed amount tagged XLM.
     [
       addExpense,
+      currency,
       description,
       members,
       onSuccess,
@@ -229,6 +235,7 @@ export function useExpenseForm({
       splitMode,
       title,
       toastError,
+      toastInfo,
       toastSuccess,
       totalAmount,
       validate,
