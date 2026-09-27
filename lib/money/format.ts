@@ -2,18 +2,36 @@ import { type AssetRef } from "@/lib/stellar/assets";
 import { divideBigInt } from "./amount";
 
 export interface AssetFormattingConfig {
+  /**
+   * Decimal places used when rendering amounts to the user (display layer).
+   * Must match the precision the UI commits to showing so that all components
+   * agree on the same rounded value.
+   */
   decimals: number;
+  /**
+   * Decimal places used when writing amounts to the settlement ledger.
+   * Splits are computed at this precision using BigInt arithmetic so that
+   * display totals always equal the sum of the stored shares.
+   *
+   * For XLM this is 7 (1 stroop = 0.0000001 XLM).
+   * For fiat this is the same as `decimals` (cents / pence etc.).
+   */
+  settlementDecimals: number;
   isFiat: boolean;
   name: string;
 }
 
+// XLM display precision is intentionally kept at 7 to match the Stellar
+// ledger (1 stroop = 10^-7 XLM). Using fewer display digits (e.g. 4) caused
+// formatMoney to round at a different threshold than the BigInt split engine,
+// producing share totals that differed from the displayed expense total.
 const ASSET_CONFIGS: Record<string, AssetFormattingConfig> = {
-  USD: { decimals: 2, isFiat: true, name: "US Dollars" },
-  EUR: { decimals: 2, isFiat: true, name: "Euros" },
-  INR: { decimals: 2, isFiat: true, name: "Indian Rupees" },
-  JPY: { decimals: 0, isFiat: true, name: "Japanese Yen" },
-  XLM: { decimals: 4, isFiat: false, name: "Stellar Lumens" },
-  USDC: { decimals: 2, isFiat: false, name: "USDC" },
+  USD:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "US Dollars" },
+  EUR:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "Euros" },
+  INR:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "Indian Rupees" },
+  JPY:  { decimals: 0, settlementDecimals: 0, isFiat: true,  name: "Japanese Yen" },
+  XLM:  { decimals: 7, settlementDecimals: 7, isFiat: false, name: "Stellar Lumens" },
+  USDC: { decimals: 7, settlementDecimals: 7, isFiat: false, name: "USDC" },
 };
 
 /**
@@ -27,10 +45,10 @@ export function getAssetConfig(asset: string): AssetFormattingConfig {
   try {
     const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency: upper });
     const decimals = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-    return { decimals, isFiat: true, name: upper };
+    return { decimals, settlementDecimals: decimals, isFiat: true, name: upper };
   } catch {
-    // If invalid, treat as custom crypto token
-    return { decimals: 4, isFiat: false, name: upper };
+    // If invalid, treat as custom crypto token (7dp to match Stellar precision)
+    return { decimals: 7, settlementDecimals: 7, isFiat: false, name: upper };
   }
 }
 
