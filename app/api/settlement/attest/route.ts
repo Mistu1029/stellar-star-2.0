@@ -33,6 +33,7 @@ import {
   verifyPaymentByHash,
 } from "@/lib/settlement/horizonVerify";
 import {
+  allocateAndCommit,
   commitAttestation,
   inspectAllocation,
   isDurable,
@@ -171,128 +172,87 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Allocation: one payment cannot settle the same debt twice, nor more
-  //    debt than it actually paid ────────────────────────────────────────────
-  let allocation;
+  //    debt than it actually paid (atomic check & commit) ─────────────────────
+  let allocationResult;
   try {
-    allocation = await inspectAllocation(normalisedTxHash, expenseId, member);
+    allocationResult = await allocateAndCommit({
+      txHash: normalisedTxHash,
+      expenseId,
+      member,
+      claimedAmountStroops: claimedAmount,
+      totalPaymentStroops: payment.amountStroops,
+      createEntry: () => {
+        const nonce = crypto.randomBytes(NONCE_BYTES).toString("hex");
+        const expiresAt = Math.floor(Date.now() / 1000) + ATTESTATION_TTL_SECONDS;
+
+        const claim: SettlementClaim = {
+          contractId: CONTRACT_ID,
+          tripId,
+          expenseId,
+          payer,
+          member,
+          amountStroops: claimedAmount.toString(),
+          asset: SETTLEMENT_ASSET_ID,
+          txHash: normalisedTxHash,
+          nonce,
+          expiresAt,
+        };
+
+        const signed = signClaimMessage(buildClaimMessage(claim));
+        return {
+          txHash: normalisedTxHash,
+          expenseId,
+          member,
+          amountStroops: claim.amountStroops,
+          nonce,
+          expiresAt,
+          signature: signed.signature,
+        };
+      },
+    });
   } catch (err) {
-    console.error("[settlement/attest] Ledger read error:", err);
+    if (err instanceof OracleKeyUnavailableError) {
+      return jsonError(err.message, 503);
+    }
+    console.error("[settlement/attest] Allocation error:", err);
     return jsonError("The attestation ledger is unavailable.", 503);
   }
 
-  if (allocation.existing) {
-    // Idempotent replay of the same request — a retry after a dropped
-    // response gets the same attestation back, not a second one. If the
-    // contract already burned its nonce the submission will fail there, which
-    // is the correct place for that to be decided.
-    if (BigInt(allocation.existing.amountStroops) !== claimedAmount) {
+  if (!allocationResult.success) {
+    if (allocationResult.reason === "AMOUNT_MISMATCH") {
       return jsonError(
         "This expense was already attested against this transaction for a different amount.",
         409,
       );
     }
-
-    let existingOracle: string;
-    try {
-      existingOracle = oraclePublicKeyOrThrow();
-    } catch (err) {
-      return jsonError(
-        err instanceof Error ? err.message : "Oracle key unavailable.",
-        503,
-      );
-    }
-
-    return NextResponse.json(
-      {
-        attestation: {
-          claim: {
-            contractId: CONTRACT_ID,
-            tripId,
-            expenseId,
-            payer,
-            member,
-            amountStroops: allocation.existing.amountStroops,
-            asset: SETTLEMENT_ASSET_ID,
-            txHash: normalisedTxHash,
-            nonce: allocation.existing.nonce,
-            expiresAt: allocation.existing.expiresAt,
-          } satisfies SettlementClaim,
-          signature: allocation.existing.signature,
-          oraclePublicKey: existingOracle,
-        },
-        reused: true,
-        durableLedger: isDurable(),
-      },
-      { headers: { "Cache-Control": "no-store" } },
-    );
-  }
-
-  const remaining = payment.amountStroops - allocation.allocatedStroops;
-  if (claimedAmount > remaining) {
     return jsonError(
       `This transaction paid ${payment.amountStroops} stroops, of which ` +
-        `${allocation.allocatedStroops} are already attested. It cannot cover a further ` +
+        `${allocationResult.allocatedStroops} are already attested. It cannot cover a further ` +
         `${claimedAmount}.`,
       422,
     );
   }
 
-  // ── Mint ───────────────────────────────────────────────────────────────────
-  const nonce = crypto.randomBytes(NONCE_BYTES).toString("hex");
-  const expiresAt = Math.floor(Date.now() / 1000) + ATTESTATION_TTL_SECONDS;
+  const stored = allocationResult.entry;
+  let oraclePublicKey: string;
+  try {
+    oraclePublicKey = oraclePublicKeyOrThrow();
+  } catch (err) {
+    return jsonError(
+      err instanceof Error ? err.message : "Oracle key unavailable.",
+      503,
+    );
+  }
 
-  const claim: SettlementClaim = {
+  const finalClaim: SettlementClaim = {
     contractId: CONTRACT_ID,
     tripId,
     expenseId,
     payer,
     member,
-    // Horizon confirmed this amount is covered; the claim carries what the
-    // caller is settling, bounded above by what was actually paid.
-    amountStroops: claimedAmount.toString(),
+    amountStroops: stored.amountStroops,
     asset: SETTLEMENT_ASSET_ID,
     txHash: normalisedTxHash,
-    nonce,
-    expiresAt,
-  };
-
-  let signature: string;
-  let oraclePublicKey: string;
-  try {
-    const signed = signClaimMessage(buildClaimMessage(claim));
-    signature = signed.signature;
-    oraclePublicKey = signed.publicKey;
-  } catch (err) {
-    if (err instanceof OracleKeyUnavailableError) {
-      return jsonError(err.message, 503);
-    }
-    console.error("[settlement/attest] Signing error:", err);
-    return jsonError("Could not sign the attestation.", 503);
-  }
-
-  // Commit before returning: an attestation that reached the caller but not
-  // the ledger would be an unaccounted allocation against the payment.
-  let stored;
-  try {
-    stored = await commitAttestation({
-      txHash: normalisedTxHash,
-      expenseId,
-      member,
-      amountStroops: claim.amountStroops,
-      nonce,
-      expiresAt,
-      signature,
-    });
-  } catch (err) {
-    console.error("[settlement/attest] Ledger write error:", err);
-    return jsonError("Could not record the attestation.", 503);
-  }
-
-  // A concurrent request may have won the insert; return whatever is stored so
-  // both callers see the same single attestation.
-  const finalClaim: SettlementClaim = {
-    ...claim,
-    amountStroops: stored.amountStroops,
     nonce: stored.nonce,
     expiresAt: stored.expiresAt,
   };
@@ -304,7 +264,7 @@ export async function POST(request: NextRequest) {
         signature: stored.signature,
         oraclePublicKey,
       },
-      reused: stored.nonce !== nonce,
+      reused: allocationResult.reused,
       durableLedger: isDurable(),
       ledger: payment.ledger,
     },
