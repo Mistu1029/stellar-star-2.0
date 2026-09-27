@@ -1,4 +1,4 @@
-import { generateInviteToken, hashToken, buildInviteUrl } from "@/lib/invitations/tokens";
+import { generateInviteToken, hashToken, hashTokenWebCrypto, buildInviteUrl } from "@/lib/invitations/tokens";
 import {
   createTripInvite,
   verifyTripInvite,
@@ -254,7 +254,7 @@ describe("Capability-Based Invitations & Placeholder Claims (Issue #171)", () =>
 
   // ── 1. Cryptographic Token Safety ──────────────────────────────────────────
 
-  it("generates 256-bit unguessable tokens with deterministic SHA-256 hash", () => {
+  it("generates 256-bit unguessable tokens with deterministic SHA-256 hash", async () => {
     const token1 = generateInviteToken();
     const token2 = generateInviteToken();
 
@@ -269,6 +269,9 @@ describe("Capability-Based Invitations & Placeholder Claims (Issue #171)", () =>
     expect(hash1a).toBe(hash1b);
     expect(hash1a).not.toBe(hash2);
     expect(hash1a).toHaveLength(64);
+
+    const webCryptoHash = await hashTokenWebCrypto(token1);
+    expect(webCryptoHash).toBe(hash1a);
   });
 
   // ── 2. Forged Token Rejection ──────────────────────────────────────────────
