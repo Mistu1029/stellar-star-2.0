@@ -4,6 +4,39 @@ import { isValidStellarAddress } from "@/lib/split/calculator";
 import type { TripInvite, TripInviteSummary, Trip } from "@/types/trip";
 import type { Member } from "@/types/expense";
 
+/**
+ * Resolves the client a helper should use.
+ *
+ * Every function here is callable from both the browser and a route handler.
+ * In the browser, omitting `client` is the normal case and the shared
+ * browser client is correct. On the server there is no `window`, so the
+ * browser client's localStorage-backed session is unreachable and
+ * `requireAuthenticatedClient()` would throw "your session has expired" — a
+ * message that sends the user to re-authenticate over what is really a
+ * server-side wiring mistake. Fail with something diagnosable instead.
+ *
+ * Server callers should pass a client from `lib/supabase/server`:
+ * `createServerClientForToken(token)` to act as the verified wallet, or
+ * `createServerAnonClient()` for a deliberately public read.
+ */
+function resolveClient(
+  client: StellarStarClient | undefined,
+  context: string,
+  anonymous = false,
+): StellarStarClient {
+  if (client) return client;
+
+  if (typeof window === "undefined") {
+    throw new Error(
+      `${context} was called on the server without a Supabase client. ` +
+        "Pass one from lib/supabase/server (createServerClientForToken for an " +
+        "authenticated wallet, createServerAnonClient for a public read).",
+    );
+  }
+
+  return anonymous ? requireSupabaseClient() : requireAuthenticatedClient();
+}
+
 export interface CreateInviteParams {
   tripId: string;
   createdByWallet: string;
@@ -35,7 +68,7 @@ export async function createTripInvite(
   params: CreateInviteParams,
   client?: StellarStarClient,
 ): Promise<CreateInviteResult> {
-  const db = client ?? requireAuthenticatedClient();
+  const db = resolveClient(client, "createTripInvite");
   const token = generateInviteToken();
   const tokenHash = hashToken(token);
 
@@ -95,7 +128,7 @@ export async function verifyTripInvite(
   }
 
   const tokenHash = hashToken(cleanToken);
-  const db = client ?? requireSupabaseClient();
+  const db = resolveClient(client, "verifyTripInvite", true);
 
   // Query invite record by token hash
   const { data: inviteData, error: inviteError } = await db
@@ -181,7 +214,7 @@ export async function claimTripInvite(
   }
 
   const tokenHash = hashToken(cleanToken);
-  const db = client ?? requireAuthenticatedClient();
+  const db = resolveClient(client, "claimTripInvite");
 
   // Invoke atomic stored procedure in PostgreSQL
   const { data, error } = await db.rpc("claim_trip_invite", {
@@ -232,7 +265,7 @@ export async function revokeTripInvite(
   callerWallet: string,
   client?: StellarStarClient,
 ): Promise<boolean> {
-  const db = client ?? requireAuthenticatedClient();
+  const db = resolveClient(client, "revokeTripInvite");
 
   const { error } = await db
     .from("trip_invites")
@@ -258,7 +291,7 @@ export async function fetchTripInvites(
   callerWallet: string,
   client?: StellarStarClient,
 ): Promise<TripInvite[]> {
-  const db = client ?? requireAuthenticatedClient();
+  const db = resolveClient(client, "fetchTripInvites");
 
   const { data, error } = await db
     .from("trip_invites")
