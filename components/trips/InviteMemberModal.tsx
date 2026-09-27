@@ -1,26 +1,17 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Copy, Check, X, Link, Shield, Trash2, Loader2, UserPlus, QrCode } from "lucide-react";
+import { Copy, Check, Link, Loader2, QrCode } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "@/lib/supabase/useSession";
 import { QRCodeSVG } from "qrcode.react";
 import type { Trip } from "@/types/trip";
-import type { Member } from "@/types/expense";
 
 interface InviteMemberModalProps {
   trip: Trip;
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface ActiveInvite {
-  id: string;
-  memberId?: string | null;
-  expiresAt: string;
-  uses: number;
-  maxUses: number;
-  revoked: boolean;
 }
 
 export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalProps) {
@@ -74,8 +65,6 @@ export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalPr
     });
   }, [isOpen, unclaimedKey, unclaimedMembers]);
 
-  if (!isOpen) return null;
-
   const handleGenerate = async () => {
     setLoading(true);
     try {
@@ -116,47 +105,37 @@ export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl border border-[#EEEEEE] shadow-xl w-full max-w-md overflow-hidden animate-scale-in">
-        <div className="flex items-center justify-between p-4 border-b border-[#F0F0F0]">
-          <div className="flex items-center gap-2">
-            <UserPlus size={18} className="text-[#2DD4BF]" />
-            <h3 className="text-base font-bold text-[#0F0F14]">Invite to Trip</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-[#888] hover:text-[#0F0F14] hover:bg-[#F5F5F5] transition-colors"
+    <Modal open={isOpen} onClose={onClose} title="Invite to Trip" size="md">
+      <div className="space-y-4">
+        <div>
+          <label
+            htmlFor="invite-member-slot"
+            className="block text-xs font-semibold text-[#444] uppercase tracking-wide mb-1.5"
           >
-            <X size={16} />
-          </button>
+            Select Member Slot to Invite
+          </label>
+          {unclaimedMembers.length > 0 ? (
+            <select
+              id="invite-member-slot"
+              value={selectedMemberId}
+              onChange={(e) => setSelectedMemberId(e.target.value)}
+              className="w-full rounded-xl border border-[#E5E5E5] px-3 py-2.5 text-sm bg-white text-[#0F0F14] outline-none focus:border-[#2DD4BF] focus:ring-2 focus:ring-[#2DD4BF]/20 transition-all"
+            >
+              {unclaimedMembers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} (unclaimed slot)
+                </option>
+              ))}
+              <option value="">General Group Invite (any new member)</option>
+            </select>
+          ) : (
+            <p className="text-xs text-[#666] p-3 bg-[#F8F9FA] rounded-xl border border-[#E9ECEF]">
+              All current members have attached wallets. You can generate a general invite link to add a new member.
+            </p>
+          )}
         </div>
 
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-[#444] uppercase tracking-wide mb-1.5">
-              Select Member Slot to Invite
-            </label>
-            {unclaimedMembers.length > 0 ? (
-              <select
-                value={selectedMemberId}
-                onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="w-full rounded-xl border border-[#E5E5E5] px-3 py-2.5 text-sm bg-white text-[#0F0F14] outline-none focus:border-[#2DD4BF] focus:ring-2 focus:ring-[#2DD4BF]/20 transition-all"
-              >
-                {unclaimedMembers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} (unclaimed slot)
-                  </option>
-                ))}
-                <option value="">General Group Invite (any new member)</option>
-              </select>
-            ) : (
-              <p className="text-xs text-[#666] p-3 bg-[#F8F9FA] rounded-xl border border-[#E9ECEF]">
-                All current members have attached wallets. You can generate a general invite link to add a new member.
-              </p>
-            )}
-          </div>
-
-          {!generatedUrl ? (
+        {!generatedUrl ? (
             <button
               onClick={handleGenerate}
               disabled={loading}
@@ -187,6 +166,7 @@ export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalPr
                   onClick={handleCopy}
                   className="p-1.5 rounded-lg bg-[#2DD4BF] text-[#0F766E] hover:bg-[#20BEAB] transition-colors shrink-0"
                   title="Copy link"
+                  aria-label="Copy invitation link"
                 >
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -226,9 +206,8 @@ export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalPr
                 This link is valid for 7 days and can be claimed once.
               </p>
             </div>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
