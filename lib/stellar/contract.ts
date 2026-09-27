@@ -7,12 +7,13 @@ import {
   scValToNative,
   Address,
   xdr,
+  NotFoundError,
 } from "@stellar/stellar-sdk";
 import type { Attestation } from "@/lib/settlement/attest";
 import { sorobanServer } from "./soroban";
+import { server } from "./client";
 import { signXDR } from "@/lib/freighter";
 import {
-  HORIZON_URL,
   SOROBAN_RPC_URL,
   CONTRACT_ID,
   SETTLEMENT_ASSET_ID,
@@ -109,24 +110,72 @@ export function decodePoolError(raw: string): string {
   }
 }
 
+/**
+ * Loads an account's current sequence number from Horizon.
+ *
+ * Goes through the SDK's `Horizon.Server` rather than calling `fetch` directly.
+ * Two reasons:
+ *
+ *   1. Environment safety. The SDK transports over axios, which works on any
+ *      supported Node version and under Jest's jsdom/node runners. A bare
+ *      `fetch` call threw `ReferenceError: fetch is not defined` wherever the
+ *      global is absent or unpolyfilled, breaking tests and server contexts.
+ *   2. The shared client carries the configured Horizon URL, `allowHttp`, and
+ *      the SDK's own error handling, so this helper no longer reimplements
+ *      transport concerns or drifts from the rest of the app's Horizon access.
+ *
+ * Freshness: the previous implementation appended a `_ts` cache-buster and
+ * `no-store` headers. Those were compensating for the browser HTTP cache, which
+ * the SDK's axios client is not subject to — it issues a fresh request per call
+ * — so the sequence number is still read live rather than from a cache.
+ *
+ * A missing account (404) is a designed state, not a failure: an unfunded
+ * address is absent from Horizon, and callers that pass `fallbackSequence` want
+ * a synthetic `Account` so read-only simulations still work. Any other transport
+ * or HTTP error propagates as a diagnosable message.
+ */
 async function loadAccount(
   publicKey: string,
   fallbackSequence?: string,
 ): Promise<Account> {
-  const res = await fetch(
-    `${HORIZON_URL}/accounts/${publicKey}?_ts=${Date.now()}`,
-    { cache: "no-store", headers: { "Cache-Control": "no-cache" } }
-  );
-  if (res.status === 404 && fallbackSequence !== undefined) {
-    return new Account(publicKey, fallbackSequence);
-  }
-  if (!res.ok) {
+  try {
+    const account = await server.loadAccount(publicKey);
+    return new Account(publicKey, account.sequenceNumber());
+  } catch (err) {
+    if (isNotFound(err)) {
+      if (fallbackSequence !== undefined) {
+        return new Account(publicKey, fallbackSequence);
+      }
+      throw new Error(
+        "Failed to load Stellar account (404). Verify your address is funded on testnet.",
+      );
+    }
+
+    const status = httpStatusOf(err);
     throw new Error(
-      `Failed to load Stellar account (${res.status}). Verify your address is funded on testnet.`
+      status !== null
+        ? `Failed to load Stellar account (${status}). Verify your address is funded on testnet.`
+        : `Failed to load Stellar account: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  const data = (await res.json()) as { sequence: string };
-  return new Account(publicKey, data.sequence);
+}
+
+/** Reads the HTTP status off an SDK `NetworkError`, if the error carries one. */
+function httpStatusOf(err: unknown): number | null {
+  const status = (err as { response?: { status?: unknown } } | null)?.response?.status;
+  return typeof status === "number" ? status : null;
+}
+
+/**
+ * True when Horizon reported the account as absent.
+ *
+ * Checks the SDK's `NotFoundError` type and the raw 404 status. Both, because
+ * the type check alone would miss an error surfaced by a mocked or wrapped
+ * client in tests, and the status check alone would miss an SDK build that
+ * omits the response object.
+ */
+function isNotFound(err: unknown): boolean {
+  return err instanceof NotFoundError || httpStatusOf(err) === 404;
 }
 
 /**
