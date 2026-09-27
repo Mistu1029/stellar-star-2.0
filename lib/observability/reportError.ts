@@ -18,10 +18,15 @@
  */
 
 import { STELLAR_NETWORK, APP_VERSION } from "@/lib/utils/constants";
+import {
+  REQUEST_ID_HEADER,
+  getOrCreateRequestId,
+} from "@/lib/observability/requestId";
 
 export type ErrorSeverity = "info" | "warning" | "error";
 
 export interface ReportedError {
+  requestId: string;
   name: string;
   message: string;
   stack?: string;
@@ -62,10 +67,12 @@ export function buildReport(
   name: string,
   error: unknown,
   context?: Record<string, unknown>,
-  severity: ErrorSeverity = "error"
+  severity: ErrorSeverity = "error",
+  requestId?: string,
 ): ReportedError {
   const { message, stack } = toMessage(error);
   return {
+    requestId: getOrCreateRequestId(requestId),
     name,
     message,
     stack,
@@ -89,9 +96,10 @@ export function reportError(
   name: string,
   error: unknown,
   context?: Record<string, unknown>,
-  severity: ErrorSeverity = "error"
+  severity: ErrorSeverity = "error",
+  requestId?: string,
 ): void {
-  const report = buildReport(name, error, context, severity);
+  const report = buildReport(name, error, context, severity, requestId);
 
   if (customReporter) {
     try {
@@ -110,13 +118,17 @@ export function reportError(
       try {
         await fetch(INTERNAL_ENDPOINT, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            [REQUEST_ID_HEADER]: report.requestId,
+          },
           body: JSON.stringify(report),
           keepalive: true,
         });
       } catch {
         console.error(
           STRUCTURED_PREFIX,
+          report.requestId,
           report.name,
           report.message,
           report.context ?? ""
@@ -127,7 +139,7 @@ export function reportError(
   }
 
   // Server context: log directly (e.g. contract code imported by an API route).
-  console.error(STRUCTURED_PREFIX, report.name, report.message, report.context ?? "");
+  console.error(STRUCTURED_PREFIX, JSON.stringify(report));
 }
 
 /**
@@ -137,7 +149,8 @@ export function reportError(
 export function reportMoneyPathError(
   stage: string,
   error: unknown,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
+  requestId?: string,
 ): void {
-  reportError(`money-path.${stage}`, error, context);
+  reportError(`money-path.${stage}`, error, context, "error", requestId);
 }

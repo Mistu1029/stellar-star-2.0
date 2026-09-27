@@ -1558,6 +1558,7 @@ CREATE TABLE IF NOT EXISTS public.settlement_intents (
   -- The UNIQUE constraint is the concurrency guarantee — two simultaneous
   -- attempts to settle one debt collide here and exactly one proceeds.
   idempotency_key   TEXT        NOT NULL,
+  request_id        UUID        NOT NULL DEFAULT gen_random_uuid(),
 
   trip_id           TEXT        NOT NULL,
   expense_id        TEXT        NOT NULL,
@@ -1599,6 +1600,9 @@ CREATE INDEX IF NOT EXISTS settlement_intents_member_status_idx
 -- fetchSettlementIntentByExpenseAndMember orders by created_at within the pair.
 CREATE INDEX IF NOT EXISTS settlement_intents_expense_member_idx
   ON public.settlement_intents (expense_id, member_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS settlement_intents_request_id_idx
+  ON public.settlement_intents (request_id);
 
 -- ─── UPDATED_AT TRIGGER ──────────────────────────────────────────────────────
 DROP TRIGGER IF EXISTS settlement_intents_set_updated_at ON public.settlement_intents;
@@ -1656,7 +1660,9 @@ VALUES
   ('0001', '0001_baseline', 'baseline_initial_checksum'),
   ('0002', '0002_explicit_trigger_pipeline', 'trigger_pipeline_checksum'),
   ('0003', '0003_trip_invitations_capabilities', 'trip_invites_capability_checksum'),
-  ('0004', '0004_settlement_intents', 'settlement_intents_v1')
+  ('0004', '0004_settlement_intents', 'settlement_intents_v1'),
+  ('0005', '0005_verify_trip_invite_rpc', 'verify_trip_invite_v1'),
+  ('0006', '0006_settlement_request_ids', 'settlement_request_ids_v1')
 ON CONFLICT (version) DO NOTHING;
 
 
