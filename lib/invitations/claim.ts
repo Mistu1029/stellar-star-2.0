@@ -116,7 +116,46 @@ export async function createTripInvite(
 }
 
 /**
+ * True when the failure is "this function does not exist" rather than a raise
+ * from inside it. PGRST202 is PostgREST's code for an unresolvable RPC; the
+ * message patterns cover a schema cache that has not reloaded yet. Distinguishing
+ * the two matters: a missing function means the migration has not been applied
+ * and the caller should fall back, whereas a raise is a real verdict on the
+ * invite and must be reported as-is.
+ */
+function isMissingRpc(error: { code?: string; message: string }): boolean {
+  return (
+    error.code === "PGRST202" ||
+    /(could not find|unknown|undefined) function/i.test(error.message) ||
+    /function .*verify_trip_invite.* does not exist/i.test(error.message) ||
+    /schema cache/i.test(error.message)
+  );
+}
+
+/** Maps a raise from verify_trip_invite onto the message the user should see. */
+function inviteErrorMessage(raw: string): string {
+  if (raw.includes("INVITE_REVOKED")) return "This invitation has been revoked.";
+  if (raw.includes("INVITE_EXPIRED")) return "This invitation has expired.";
+  if (raw.includes("INVITE_EXHAUSTED")) {
+    return "This invitation has already reached its maximum uses.";
+  }
+  if (raw.includes("TRIP_NOT_FOUND")) {
+    return "The trip associated with this invite no longer exists.";
+  }
+  if (raw.includes("INVITE_NOT_FOUND")) return "Invalid or unrecognized invitation link.";
+  return raw || "Invalid or unrecognized invitation link.";
+}
+
+/**
  * Verifies an invite token and returns public trip metadata along with available placeholder slots.
+ *
+ * Goes through the `verify_trip_invite` RPC rather than reading the tables
+ * directly. The person opening an invite link is not a member of the trip yet —
+ * often not even signed in — so `trip_invites_select_members` and
+ * `trips_select_members`, which both require `member_wallets` to contain
+ * `current_wallet()`, match nothing for them. Selecting from those tables here
+ * returned zero rows and every invite link 404'd. The RPC is SECURITY DEFINER
+ * and returns only the fields below, so the token stays the whole capability.
  */
 export async function verifyTripInvite(
   token: string,
@@ -130,7 +169,50 @@ export async function verifyTripInvite(
   const tokenHash = hashToken(cleanToken);
   const db = resolveClient(client, "verifyTripInvite", true);
 
-  // Query invite record by token hash
+  const { data: rpcData, error: rpcError } = await db.rpc("verify_trip_invite", {
+    p_token_hash: tokenHash,
+  });
+
+  if (!rpcError && rpcData) {
+    const row = rpcData as {
+      invite_id: string;
+      trip_id: string;
+      trip_name: string;
+      trip_description: string | null;
+      member_id: string | null;
+      member_name: string | null;
+      inviter_wallet: string;
+      expires_at: string;
+      unclaimed_members: Array<{ id: string; name: string }> | null;
+    };
+
+    return {
+      inviteId: row.invite_id,
+      tripId: row.trip_id,
+      tripName: row.trip_name,
+      tripDescription: row.trip_description || undefined,
+      memberId: row.member_id,
+      memberName: row.member_name,
+      inviterWallet: row.inviter_wallet,
+      expiresAt: row.expires_at,
+      unclaimedMembers: row.unclaimed_members ?? [],
+      // The RPC raises on every invalid case, so reaching here means valid.
+      isExpired: false,
+      isRevoked: false,
+      isExhausted: false,
+    };
+  }
+
+  // A raise inside the function is the normal way an invalid invite is reported.
+  if (rpcError && !isMissingRpc(rpcError)) {
+    throw new Error(inviteErrorMessage(rpcError.message));
+  }
+
+  // The RPC is absent (migration 0005 not yet applied). Fall back to reading the
+  // tables. That read is what issue #221 describes as RLS-blocked, so it only
+  // succeeds for a caller who can already see the trip — a member previewing
+  // their own invite, or a service-role client. Anyone else still gets the 404,
+  // which is the pre-migration behaviour rather than a new failure.
   const { data: inviteData, error: inviteError } = await db
     .from("trip_invites")
     .select("*")

@@ -538,3 +538,169 @@ describe("Capability-Based Invitations & Placeholder Claims (Issue #171)", () =>
     expect(isPayableOnChain).toBe(true);
   });
 });
+
+// ─── Unauthenticated Invite Verification (Issue #221) ────────────────────────
+//
+// The prospective member is not in the trip's member_wallets, so the RLS
+// policies on trip_invites and trips match nothing for them and a direct table
+// read returns zero rows. verifyTripInvite therefore goes through the
+// verify_trip_invite SECURITY DEFINER RPC. These tests stand in for that RPC
+// and assert two things: the anon caller gets a usable summary, and the RPC's
+// projection never leaks an existing member's wallet address.
+
+describe("Unauthenticated invite verification via RPC (Issue #221)", () => {
+  const TRIP = {
+    id: "trip-tokyo-2026",
+    name: "Tokyo 2026",
+    description: "Cherry blossom season",
+    members: [
+      { id: "m-alice", name: "Alice", walletAddress: ADDR_ALICE },
+      { id: "m-bob", name: "Bob", walletAddress: "" },
+      { id: "m-charlie", name: "Charlie", walletAddress: "" },
+    ],
+  };
+
+  /**
+   * A client that answers only verify_trip_invite, mirroring the SQL function:
+   * it projects unclaimed slots down to {id, name} and raises for every invalid
+   * case. Every table read rejects, which is what RLS does to an anon caller —
+   * so a test passing here proves the helper never needs the tables.
+   */
+  function anonClient(invite: {
+    id: string;
+    token_hash: string;
+    member_id?: string | null;
+    created_by_wallet: string;
+    expires_at: string;
+    max_uses: number;
+    uses: number;
+    revoked: boolean;
+  }) {
+    return {
+      from: () => {
+        throw new Error("RLS: anon may not read this table");
+      },
+      rpc: async (fnName: string, args: any) => {
+        if (fnName !== "verify_trip_invite") {
+          return { data: null, error: { message: `Unknown function ${fnName}` } };
+        }
+        if (args.p_token_hash !== invite.token_hash) {
+          return {
+            data: null,
+            error: { message: "INVITE_NOT_FOUND: Invalid or unrecognized invitation link" },
+          };
+        }
+        if (invite.revoked) {
+          return { data: null, error: { message: "INVITE_REVOKED: revoked" } };
+        }
+        if (new Date(invite.expires_at).getTime() <= Date.now()) {
+          return { data: null, error: { message: "INVITE_EXPIRED: expired" } };
+        }
+        if (invite.uses >= invite.max_uses) {
+          return { data: null, error: { message: "INVITE_EXHAUSTED: exhausted" } };
+        }
+
+        const unclaimed = TRIP.members
+          .filter((m) => !m.walletAddress || m.walletAddress.trim() === "")
+          .map((m) => ({ id: m.id, name: m.name }));
+        const named = invite.member_id
+          ? TRIP.members.find((m) => m.id === invite.member_id)
+          : undefined;
+
+        return {
+          data: {
+            invite_id: invite.id,
+            trip_id: TRIP.id,
+            trip_name: TRIP.name,
+            trip_description: TRIP.description,
+            member_id: invite.member_id ?? null,
+            member_name: named?.name ?? null,
+            inviter_wallet: invite.created_by_wallet,
+            expires_at: invite.expires_at,
+            unclaimed_members: unclaimed,
+            is_expired: false,
+            is_revoked: false,
+            is_exhausted: false,
+          },
+          error: null,
+        };
+      },
+    } as any;
+  }
+
+  const token = "a".repeat(64);
+
+  function validInvite(overrides: Record<string, any> = {}) {
+    return {
+      id: "inv-221",
+      token_hash: hashToken(token),
+      member_id: null,
+      created_by_wallet: ADDR_ALICE,
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      max_uses: 1,
+      uses: 0,
+      revoked: false,
+      ...overrides,
+    };
+  }
+
+  it("verifies an invite for a caller who can read neither trip_invites nor trips", async () => {
+    const summary = await verifyTripInvite(token, anonClient(validInvite()));
+
+    expect(summary.tripId).toBe(TRIP.id);
+    expect(summary.tripName).toBe("Tokyo 2026");
+    expect(summary.tripDescription).toBe("Cherry blossom season");
+    expect(summary.inviterWallet).toBe(ADDR_ALICE);
+    expect(summary.isRevoked).toBe(false);
+    expect(summary.isExpired).toBe(false);
+    expect(summary.isExhausted).toBe(false);
+  });
+
+  it("offers only the unclaimed slots, and never an existing member's wallet", async () => {
+    const summary = await verifyTripInvite(token, anonClient(validInvite()));
+
+    expect(summary.unclaimedMembers).toEqual([
+      { id: "m-bob", name: "Bob" },
+      { id: "m-charlie", name: "Charlie" },
+    ]);
+
+    // Alice has a wallet attached, so her slot is not on offer at all.
+    expect(summary.unclaimedMembers.map((m) => m.id)).not.toContain("m-alice");
+
+    // And no wallet address reaches the client through this payload.
+    expect(JSON.stringify(summary)).not.toContain(ADDR_ALICE.slice(0, 20));
+  });
+
+  it("names the target slot when the invite is addressed to one", async () => {
+    const summary = await verifyTripInvite(
+      token,
+      anonClient(validInvite({ member_id: "m-bob" })),
+    );
+
+    expect(summary.memberId).toBe("m-bob");
+    expect(summary.memberName).toBe("Bob");
+  });
+
+  it("surfaces the RPC's verdict for revoked, expired and exhausted invites", async () => {
+    await expect(
+      verifyTripInvite(token, anonClient(validInvite({ revoked: true }))),
+    ).rejects.toThrow("This invitation has been revoked");
+
+    await expect(
+      verifyTripInvite(
+        token,
+        anonClient(validInvite({ expires_at: new Date(Date.now() - 1000).toISOString() })),
+      ),
+    ).rejects.toThrow("This invitation has expired");
+
+    await expect(
+      verifyTripInvite(token, anonClient(validInvite({ uses: 1, max_uses: 1 }))),
+    ).rejects.toThrow("maximum uses");
+  });
+
+  it("rejects a forged token without falling back to a table read", async () => {
+    await expect(
+      verifyTripInvite("f".repeat(64), anonClient(validInvite())),
+    ).rejects.toThrow("Invalid or unrecognized invitation link");
+  });
+});

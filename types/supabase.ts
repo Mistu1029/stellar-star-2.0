@@ -345,6 +345,12 @@ export type Database = {
         };
         Returns: Json;
       };
+      verify_trip_invite: {
+        Args: {
+          p_token_hash: string;
+        };
+        Returns: Json;
+      };
       update_expense_versioned: {
         Args: {
           p_id: string;

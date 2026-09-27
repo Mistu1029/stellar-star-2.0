@@ -17,9 +17,17 @@ export async function GET(request: NextRequest) {
     // no session yet. It still needs a *server* client: the browser one reads
     // its token from localStorage, which does not exist in this runtime.
     const summary = await verifyTripInvite(token.trim(), createServerAnonClient());
-    return NextResponse.json(summary);
+    // Per-token and never public: keep it out of shared caches.
+    return NextResponse.json(summary, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid or unrecognized invitation.";
-    return NextResponse.json({ error: message }, { status: 404 });
+    // A revoked or expired invite was a real link, so 410 Gone rather than 404 —
+    // the page can tell the recipient to ask for a fresh link instead of
+    // implying they mistyped the URL.
+    const gone = /revoked|expired|maximum uses|no longer exists/i.test(message);
+    return NextResponse.json(
+      { error: message },
+      { status: gone ? 410 : 404, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
