@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Copy, Check, X, Link, Shield, Trash2, Loader2, UserPlus, QrCode } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { useSession } from "@/lib/supabase/useSession";
@@ -33,22 +33,46 @@ export function InviteMemberModal({ trip, isOpen, onClose }: InviteMemberModalPr
   const [loading, setLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
-  const unclaimedMembers = (trip.members || []).filter(
-    (m) => !m.walletAddress || m.walletAddress.trim() === "",
+  const unclaimedMembers = useMemo(
+    () =>
+      (trip.members || []).filter(
+        (m) => !m.walletAddress || m.walletAddress.trim() === "",
+      ),
+    [trip.members],
   );
 
+  // Identity of the unclaimed set, so realtime updates that replace `trip.members`
+  // with an equivalent array don't churn the selection, while an actual claim does.
+  const unclaimedKey = useMemo(
+    () => unclaimedMembers.map((m) => m.id).join(","),
+    [unclaimedMembers],
+  );
+
+  // Reset transient link state and default the selection each time the modal opens.
   useEffect(() => {
     if (isOpen) {
       setGeneratedUrl("");
       setCopied(false);
       setShowQR(false);
-      if (unclaimedMembers.length > 0) {
-        setSelectedMemberId(unclaimedMembers[0].id);
-      } else {
-        setSelectedMemberId("");
-      }
+      setSelectedMemberId(unclaimedMembers.length > 0 ? unclaimedMembers[0].id : "");
     }
-  }, [isOpen, trip.members]);
+    // Intentionally keyed on `isOpen` only: this is the open transition. Keeping the
+    // selection valid afterwards is the next effect's job.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Keep the selection pointing at a slot that is still unclaimed. Runs on open and
+  // whenever the unclaimed set changes underneath us (e.g. a Supabase Realtime claim).
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setSelectedMemberId((current) => {
+      // "" is the General Group Invite option, always valid.
+      if (current === "") return current;
+      if (unclaimedMembers.some((m) => m.id === current)) return current;
+      return unclaimedMembers.length > 0 ? unclaimedMembers[0].id : "";
+    });
+  }, [isOpen, unclaimedKey, unclaimedMembers]);
 
   if (!isOpen) return null;
 
