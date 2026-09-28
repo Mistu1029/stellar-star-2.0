@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useMemo } from "react";
 import type { Expense } from "@/types/expense";
 import { LS_EXPENSES } from "@/lib/utils/constants";
+import { useToast } from "@/components/ui/Toast";
 import {
   fetchExpenses,
   insertExpense,
@@ -36,6 +37,7 @@ const getExpenseId = (expense: Expense) => expense.id;
 
 export function ExpenseProvider({ children }: { children: React.ReactNode }) {
   const { publicKey } = useWalletContext();
+  const { error: toastError } = useToast();
 
   const { items: expenses, isLoading, isOffline, error, needsSetup, refresh, mutate, wallet } =
     useRealtimeCollection<Expense>({
@@ -56,32 +58,69 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     async (expense: Expense) => {
       if (!wallet) throw new Error("Sign in with your wallet before adding an expense.");
 
-      const saved = await insertExpense(expense, wallet);
       mutate((previous) =>
-        previous.some((e) => e.id === saved.id) ? previous : [saved, ...previous]
+        previous.some((e) => e.id === expense.id) ? previous : [expense, ...previous]
       );
+
+      try {
+        const saved = await insertExpense(expense, wallet);
+        mutate((previous) =>
+          previous.map((e) => (e.id === saved.id ? saved : e))
+        );
+      } catch (err: any) {
+        mutate((previous) => previous.filter((e) => e.id !== expense.id));
+        toastError("Failed to add expense", "An error occurred while saving.");
+        throw err;
+      }
     },
-    [wallet, mutate]
+    [wallet, mutate, toastError]
   );
 
   const updateExpense = useCallback(
     async (id: string, updates: Partial<Expense>) => {
-      const baseExpense = expensesRef.current.find((e) => e.id === id);
-      const saved = await updateExpenseRow(id, updates, baseExpense);
-      mutate((previous) => previous.map((e) => (e.id === id ? saved : e)));
+      const baseExpense = expenses.find((e) => e.id === id);
+      if (!baseExpense) return;
+
+      const snapshot = baseExpense;
+
+      mutate((previous) =>
+        previous.map((e) => (e.id === id ? { ...e, ...updates } : e))
+      );
+
+      try {
+        const saved = await updateExpenseRow(id, updates, snapshot);
+        mutate((previous) => previous.map((e) => (e.id === id ? saved : e)));
+      } catch (err: any) {
+        mutate((previous) => previous.map((e) => (e.id === id ? snapshot : e)));
+        toastError("Failed to update expense", "Reverting to previous state.");
+        throw err;
+      }
     },
-    [mutate]
+    [expenses, mutate, toastError]
   );
 
   const deleteExpense = useCallback(
     async (id: string) => {
-      // Unlink first: if the delete succeeds but the unlink does not, trips are
-      // left pointing at an expense that no longer exists.
-      await detachExpenseFromTrips(id);
-      await deleteExpenseRow(id);
+      const snapshot = expenses.find((e) => e.id === id);
+      if (!snapshot) return;
+
       mutate((previous) => previous.filter((e) => e.id !== id));
+
+      try {
+        // Unlink first: if the delete succeeds but the unlink does not, trips are
+        // left pointing at an expense that no longer exists.
+        await detachExpenseFromTrips(id);
+        await deleteExpenseRow(id);
+      } catch (err: any) {
+        mutate((previous) => {
+          if (previous.some((e) => e.id === id)) return previous;
+          return [...previous, snapshot];
+        });
+        toastError("Failed to delete expense", "Reverting to previous state.");
+        throw err;
+      }
     },
-    [mutate]
+    [expenses, mutate, toastError]
   );
 
   /**

@@ -26,10 +26,12 @@ import {
   DatabaseError,
 } from "@/lib/supabase/queries";
 import { requireAuthenticatedClient, type StellarStarClient } from "@/lib/supabase/client";
+import { getOrCreateRequestId } from "@/lib/observability/requestId";
 
 export interface SettlementIntent {
   id: string;
   idempotencyKey: string;
+  requestId: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -52,6 +54,7 @@ export function rowToSettlementIntent(row: SettlementIntentRow): SettlementInten
   return {
     id: row.id,
     idempotencyKey: row.idempotency_key,
+    requestId: row.request_id,
     tripId: row.trip_id,
     expenseId: row.expense_id,
     memberId: row.member_id,
@@ -79,6 +82,7 @@ export function deriveIdempotencyKey(tripId: string, expenseId: string, memberId
 }
 
 export interface AcquireIntentParams {
+  requestId?: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -107,6 +111,7 @@ export async function acquireSettlementIntent(
   client?: StellarStarClient,
 ): Promise<AcquireIntentResult> {
   const idempotencyKey = deriveIdempotencyKey(params.tripId, params.expenseId, params.memberId);
+  const requestId = getOrCreateRequestId(params.requestId);
 
   // Check if an existing intent row exists
   let existing: SettlementIntent | null = null;
@@ -159,6 +164,7 @@ export async function acquireSettlementIntent(
         existing.id,
         {
           status: "submitting",
+          request_id: requestId,
           amount: params.amount,
           currency: params.currency ?? "XLM",
           error_message: null,
@@ -176,6 +182,7 @@ export async function acquireSettlementIntent(
   try {
     const insertPayload: SettlementIntentInsert = {
       idempotency_key: idempotencyKey,
+      request_id: requestId,
       trip_id: params.tripId || "none",
       expense_id: params.expenseId,
       member_id: params.memberId,
@@ -265,4 +272,62 @@ export async function markIntentFailed(
     },
     client,
   );
+}
+
+// ─── Trustline idempotency ────────────────────────────────────────────────────
+
+/**
+ * Module-level in-process lock for trustline setup attempts.
+ *
+ * Key: `trustline:<publicKey>:<assetCode>:<assetIssuer>`
+ * Value: the in-flight Promise<boolean> for that wallet+asset pair.
+ *
+ * When two code paths try to set up the same trustline concurrently (e.g. the
+ * user opens two tabs, or a React strict-mode double-effect fires), the second
+ * caller receives the same promise as the first and waits for it to settle
+ * rather than submitting a duplicate ChangeTrust transaction to Horizon.
+ *
+ * The entry is deleted from the Map once the attempt settles, so a genuine
+ * retry after failure is not blocked.
+ */
+const trustlineInflight = new Map<string, Promise<boolean>>();
+
+export interface AcquireTrustlineParams {
+  publicKey: string;
+  assetCode: string;
+  assetIssuer: string;
+  /** The async work to perform when no equivalent attempt is in-flight. */
+  work: () => Promise<boolean>;
+}
+
+/**
+ * Ensures at most one trustline-setup attempt is active per (wallet, asset).
+ *
+ * Returns the result of `params.work` for the first caller. Any concurrent
+ * callers sharing the same key receive the same promise and therefore the same
+ * result without triggering duplicate Horizon submissions.
+ *
+ * Usage:
+ * ```ts
+ * const ok = await acquireTrustlineIntent({
+ *   publicKey,
+ *   assetCode: asset.code,
+ *   assetIssuer: asset.issuer,
+ *   work: () => submitChangeTrustTransaction(publicKey, asset),
+ * });
+ * ```
+ */
+export function acquireTrustlineIntent(params: AcquireTrustlineParams): Promise<boolean> {
+  const key = `trustline:${params.publicKey}:${params.assetCode}:${params.assetIssuer}`;
+
+  const existing = trustlineInflight.get(key);
+  if (existing) return existing;
+
+  const promise = params.work().finally(() => {
+    // Release the lock unconditionally so a retry is never permanently blocked.
+    trustlineInflight.delete(key);
+  });
+
+  trustlineInflight.set(key, promise);
+  return promise;
 }

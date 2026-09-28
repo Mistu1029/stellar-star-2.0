@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { formatMoney } from "@/lib/money/format";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,12 +11,15 @@ export function formatAddress(address: string, chars = 6): string {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
 
+/**
+ * Formats an XLM amount for display.
+ *
+ * Delegates to {@link formatMoney} so that rounding mode, decimal precision,
+ * and grouping separators are all governed by a single source of truth.
+ * Callers that need locale-awareness should use `formatMoney` directly.
+ */
 export function formatXLM(amount: string | number): string {
-  const num = typeof amount === "string" ? parseFloat(amount) : amount;
-  return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 7,
-  }).format(num);
+  return formatMoney(amount, "XLM", "en-US").formatted;
 }
 
 /**
