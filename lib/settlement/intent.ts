@@ -273,3 +273,61 @@ export async function markIntentFailed(
     client,
   );
 }
+
+// ─── Trustline idempotency ────────────────────────────────────────────────────
+
+/**
+ * Module-level in-process lock for trustline setup attempts.
+ *
+ * Key: `trustline:<publicKey>:<assetCode>:<assetIssuer>`
+ * Value: the in-flight Promise<boolean> for that wallet+asset pair.
+ *
+ * When two code paths try to set up the same trustline concurrently (e.g. the
+ * user opens two tabs, or a React strict-mode double-effect fires), the second
+ * caller receives the same promise as the first and waits for it to settle
+ * rather than submitting a duplicate ChangeTrust transaction to Horizon.
+ *
+ * The entry is deleted from the Map once the attempt settles, so a genuine
+ * retry after failure is not blocked.
+ */
+const trustlineInflight = new Map<string, Promise<boolean>>();
+
+export interface AcquireTrustlineParams {
+  publicKey: string;
+  assetCode: string;
+  assetIssuer: string;
+  /** The async work to perform when no equivalent attempt is in-flight. */
+  work: () => Promise<boolean>;
+}
+
+/**
+ * Ensures at most one trustline-setup attempt is active per (wallet, asset).
+ *
+ * Returns the result of `params.work` for the first caller. Any concurrent
+ * callers sharing the same key receive the same promise and therefore the same
+ * result without triggering duplicate Horizon submissions.
+ *
+ * Usage:
+ * ```ts
+ * const ok = await acquireTrustlineIntent({
+ *   publicKey,
+ *   assetCode: asset.code,
+ *   assetIssuer: asset.issuer,
+ *   work: () => submitChangeTrustTransaction(publicKey, asset),
+ * });
+ * ```
+ */
+export function acquireTrustlineIntent(params: AcquireTrustlineParams): Promise<boolean> {
+  const key = `trustline:${params.publicKey}:${params.assetCode}:${params.assetIssuer}`;
+
+  const existing = trustlineInflight.get(key);
+  if (existing) return existing;
+
+  const promise = params.work().finally(() => {
+    // Release the lock unconditionally so a retry is never permanently blocked.
+    trustlineInflight.delete(key);
+  });
+
+  trustlineInflight.set(key, promise);
+  return promise;
+}
