@@ -47,6 +47,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       connectedWallet: publicKey,
     });
 
+  const expensesRef = React.useRef(expenses);
+  React.useEffect(() => {
+    expensesRef.current = expenses;
+  }, [expenses]);
+
   const addExpense = useCallback(
     async (expense: Expense) => {
       if (!wallet) throw new Error("Sign in with your wallet before adding an expense.");
@@ -61,11 +66,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
 
   const updateExpense = useCallback(
     async (id: string, updates: Partial<Expense>) => {
-      const baseExpense = expenses.find((e) => e.id === id);
+      const baseExpense = expensesRef.current.find((e) => e.id === id);
       const saved = await updateExpenseRow(id, updates, baseExpense);
       mutate((previous) => previous.map((e) => (e.id === id ? saved : e)));
     },
-    [expenses, mutate]
+    [mutate]
   );
 
   const deleteExpense = useCallback(
@@ -96,7 +101,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     [mutate]
   );
 
-  const getExpense = useCallback((id: string) => expenses.find((e) => e.id === id), [expenses]);
+  const getExpense = useCallback((id: string) => expensesRef.current.find((e) => e.id === id), []);
 
   const value = useMemo<ExpenseContextType>(
     () => ({
