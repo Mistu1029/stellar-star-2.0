@@ -1655,8 +1655,9 @@ INSERT INTO public.schema_migrations (version, name, checksum)
 VALUES
   ('0001', '0001_baseline', 'baseline_initial_checksum'),
   ('0002', '0002_explicit_trigger_pipeline', 'trigger_pipeline_checksum'),
-  ('0003', '0003_trip_invitations_capabilities', 'trip_invites_capability_checksum'),
-  ('0004', '0004_settlement_intents', 'settlement_intents_v1')
+  ('0003', '0003_reconcile_drifted_schema', 'reconcile_drifted_schema_v1'),
+  ('0004', '0004_settlement_intents', 'settlement_intents_v1'),
+  ('0005', '0005_verify_trip_invite_rpc', 'verify_trip_invite_v1')
 ON CONFLICT (version) DO NOTHING;
 
 
