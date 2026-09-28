@@ -149,7 +149,37 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
     if (!publicKey) return;
 
     // 1. Device-agnostic reconciliation: check Supabase settlement intents
-    reconcilePendingIntentsForWallet(publicKey).catch(() => {});
+    reconcilePendingIntentsForWallet(publicKey).then((results) => {
+      // Find if the current expense has a pending on-chain record that needs signing
+      const needsSignature = results.find(
+        (r) => r.needsOnChainSignature && r.intentId.includes(expenseId)
+      );
+
+      if (needsSignature) {
+        // If the intent is not already loaded in pendingOnChain, populate it so the Retry button works
+        if (!pendingOnChain) {
+           const record: PendingOnChainRecord = {
+             memberPublicKey: needsSignature.intent.memberWallet,
+             tripId: needsSignature.intent.tripId,
+             expenseId: needsSignature.intent.expenseId,
+             payerPublicKey: needsSignature.intent.payerWallet,
+             amountXlm: needsSignature.intent.amount,
+             memoText: "", // Re-recording on chain doesn't strictly need memo
+             txHash: needsSignature.intent.txHash!,
+             ledger: needsSignature.intent.ledger ?? 0,
+           };
+           setPendingOnChainState(record);
+        }
+
+        setPaymentState({
+          status: "partial_success",
+          hash: needsSignature.intent.txHash!,
+          ledger: needsSignature.intent.ledger ?? 0,
+          onChain: false,
+          message: "A previous on-chain recording attempt requires your signature. Click Retry to complete it.",
+        });
+      }
+    }).catch(() => {});
 
     // 2. Restore local retry state if present
     const restored = loadPendingOnChain(publicKey, expenseId);
@@ -164,7 +194,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       });
     }
     // Only run once per (publicKey, expenseId) combination — intentional deps.
-  }, [publicKey, expenseId]);
+  }, [publicKey, expenseId, pendingOnChain]);
 
   // ---------------------------------------------------------------------------
   // Pool balance
@@ -404,7 +434,9 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
           if (intentResult.code === "SUBMITTED_NEEDS_RECONCILIATION") {
             toastInfo("Reconciling settlement...", "Previous payment detected on Stellar.");
             setPaymentState({ status: "recording", step: "simulating" });
-            const recon = await reconcileSettlementIntent(intentResult.intent);
+            const recon = await reconcileSettlementIntent(intentResult.intent, undefined, {
+              allowActiveSubmission: true,
+            });
             if (recon.reconciled) {
               setPaymentState({
                 status: "success",
