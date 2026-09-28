@@ -33,8 +33,10 @@ export async function submitSignedTransaction(
 
     if (extras?.result_codes) {
       const { transaction, operations } = extras.result_codes;
-      const opCode = operations?.[0];
-      if (opCode && opCode !== "op_success") throw new Error(friendlyOpError(opCode));
+      
+      const failedOpCode = operations?.find(code => code !== "op_success");
+      if (failedOpCode) throw new Error(friendlyOpError(failedOpCode));
+      
       if (transaction === "tx_bad_seq")          throw new Error("Transaction sequence mismatch. Please try again.");
       if (transaction === "tx_insufficient_fee") throw new Error("Transaction fee too low. Please try again.");
       if (transaction !== "tx_success")          throw new Error(`Transaction failed: ${transaction}`);
