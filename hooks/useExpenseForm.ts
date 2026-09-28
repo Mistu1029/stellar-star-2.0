@@ -11,6 +11,8 @@ import {
 } from "@/lib/split/calculator";
 import type { Expense, Member, SplitMode } from "@/types/expense";
 import { fetchExchangeRate, describeAge } from "@/lib/fx/quote";
+import { getAssetConfig } from "@/lib/money/format";
+import { parse, format } from "@/lib/money/amount";
 
 export interface UseExpenseFormOptions {
   onSuccess?: (expenseId?: string) => void;
@@ -188,11 +190,27 @@ export function useExpenseForm({
           paidByMemberId,
           splitMode,
         );
+
+        // Round the stored total using the same BigInt half_even path that
+        // the split engine uses. JS float .toFixed() uses half-up rounding,
+        // which can differ from the BigInt engine by 1 minor unit (1 stroop),
+        // causing the displayed share sum to diverge from the stored total.
+        const settlementDecimals = getAssetConfig("XLM").settlementDecimals;
+        const roundedTotalAmount = (() => {
+          try {
+            return format(parse(finalXlmAmount, settlementDecimals), settlementDecimals);
+          } catch {
+            // Fallback: if BigInt parse fails (e.g. NaN from a bad rate), keep
+            // the float representation so the error surfaces at the DB layer.
+            return finalXlmAmount.toFixed(settlementDecimals);
+          }
+        })();
+
         const expense: Expense = {
           id: crypto.randomUUID(),
           title: title.trim(),
           description: description.trim() || undefined,
-          totalAmount: finalXlmAmount.toFixed(7),
+          totalAmount: roundedTotalAmount,
           currency,
           exchangeRate,
           exchangeRateTimestamp,
