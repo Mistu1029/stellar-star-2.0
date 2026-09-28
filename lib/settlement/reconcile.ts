@@ -109,7 +109,7 @@ export async function reconcileSettlementIntent(
   // 1. Check Horizon: Did the transaction move value on the Stellar ledger?
   let verifiedPayment;
   try {
-    verifiedPayment = await verifyPaymentByHash(intent.txHash);
+    verifiedPayment = await verifyPaymentByHash(intent.txHash, intent.requestId);
   } catch (err) {
     // If Horizon cannot find the transaction or verification fails
     const message = err instanceof Error ? err.message : "Horizon verification failed.";
@@ -140,6 +140,7 @@ export async function reconcileSettlementIntent(
       } else {
         // Attempt contract recording
         const attested = await fetchAttestation({
+          requestId: intent.requestId,
           tripId: intent.tripId,
           expenseId: intent.expenseId,
           payerPublicKey: intent.payerWallet,
@@ -150,6 +151,7 @@ export async function reconcileSettlementIntent(
 
         if (attested.ok) {
           const contractRes = await recordPaymentOnChain({
+            requestId: intent.requestId,
             memberPublicKey: intent.memberWallet,
             tripId: intent.tripId,
             expenseId: intent.expenseId,

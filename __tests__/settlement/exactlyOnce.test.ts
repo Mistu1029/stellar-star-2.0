@@ -67,6 +67,7 @@ describe("Exactly-Once Settlement Recording & Concurrency (Issue #156 / Epic #50
       return {
         id: row.id,
         idempotencyKey: row.idempotency_key ?? row.idempotencyKey,
+        requestId: row.request_id ?? row.requestId,
         tripId: row.trip_id ?? row.tripId,
         expenseId: row.expense_id ?? row.expenseId,
         memberId: row.member_id ?? row.memberId,
@@ -92,6 +93,7 @@ describe("Exactly-Once Settlement Recording & Concurrency (Issue #156 / Epic #50
       const record = {
         id,
         idempotency_key: payload.idempotency_key,
+        request_id: payload.request_id,
         trip_id: payload.trip_id,
         expense_id: payload.expense_id,
         member_id: payload.member_id,
@@ -403,6 +405,7 @@ describe("Exactly-Once Settlement Recording & Concurrency (Issue #156 / Epic #50
     const intent: SettlementIntent = {
       id: "intent-retry",
       idempotencyKey: "settle:trip-r:exp-r:alice",
+      requestId: "11111111-1111-4111-8111-111111111111",
       tripId: "trip-r",
       expenseId: "exp-r",
       memberId: "alice",
@@ -464,6 +467,7 @@ describe("Exactly-Once Settlement Recording & Concurrency (Issue #156 / Epic #50
     const intent: SettlementIntent = {
       id: "intent-idem",
       idempotencyKey: "settle:trip-idem:exp-idem:alice",
+      requestId: "22222222-2222-4222-8222-222222222222",
       tripId: "trip-idem",
       expenseId: "exp-idem",
       memberId: "alice",
