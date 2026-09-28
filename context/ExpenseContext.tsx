@@ -49,6 +49,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       connectedWallet: publicKey,
     });
 
+  const expensesRef = React.useRef(expenses);
+  React.useEffect(() => {
+    expensesRef.current = expenses;
+  }, [expenses]);
+
   const addExpense = useCallback(
     async (expense: Expense) => {
       if (!wallet) throw new Error("Sign in with your wallet before adding an expense.");
@@ -135,7 +140,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     [mutate]
   );
 
-  const getExpense = useCallback((id: string) => expenses.find((e) => e.id === id), [expenses]);
+  const getExpense = useCallback((id: string) => expensesRef.current.find((e) => e.id === id), []);
 
   const value = useMemo<ExpenseContextType>(
     () => ({
