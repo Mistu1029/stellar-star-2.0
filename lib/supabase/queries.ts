@@ -170,6 +170,7 @@ export function rowToTrip(row: TripRow): Trip {
 export interface SettlementIntent {
   id: string;
   idempotencyKey: string;
+  requestId: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -192,6 +193,7 @@ export function rowToSettlementIntent(row: SettlementIntentRow): SettlementInten
   return {
     id: row.id,
     idempotencyKey: row.idempotency_key,
+    requestId: row.request_id,
     tripId: row.trip_id,
     expenseId: row.expense_id,
     memberId: row.member_id,

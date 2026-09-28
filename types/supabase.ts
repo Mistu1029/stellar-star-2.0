@@ -98,6 +98,7 @@ export type TripInviteRow = {
 export type SettlementIntentRow = {
   id: string;
   idempotency_key: string;
+  request_id: string;
   trip_id: string;
   expense_id: string;
   member_id: string;
@@ -230,6 +231,7 @@ export type Database = {
         Insert: Pick<
           SettlementIntentRow,
           | "idempotency_key"
+          | "request_id"
           | "trip_id"
           | "expense_id"
           | "member_id"

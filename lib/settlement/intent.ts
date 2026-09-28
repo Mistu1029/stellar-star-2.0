@@ -26,10 +26,12 @@ import {
   DatabaseError,
 } from "@/lib/supabase/queries";
 import { requireAuthenticatedClient, type StellarStarClient } from "@/lib/supabase/client";
+import { getOrCreateRequestId } from "@/lib/observability/requestId";
 
 export interface SettlementIntent {
   id: string;
   idempotencyKey: string;
+  requestId: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -52,6 +54,7 @@ export function rowToSettlementIntent(row: SettlementIntentRow): SettlementInten
   return {
     id: row.id,
     idempotencyKey: row.idempotency_key,
+    requestId: row.request_id,
     tripId: row.trip_id,
     expenseId: row.expense_id,
     memberId: row.member_id,
@@ -79,6 +82,7 @@ export function deriveIdempotencyKey(tripId: string, expenseId: string, memberId
 }
 
 export interface AcquireIntentParams {
+  requestId?: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -107,6 +111,7 @@ export async function acquireSettlementIntent(
   client?: StellarStarClient,
 ): Promise<AcquireIntentResult> {
   const idempotencyKey = deriveIdempotencyKey(params.tripId, params.expenseId, params.memberId);
+  const requestId = getOrCreateRequestId(params.requestId);
 
   // Check if an existing intent row exists
   let existing: SettlementIntent | null = null;
@@ -159,6 +164,7 @@ export async function acquireSettlementIntent(
         existing.id,
         {
           status: "submitting",
+          request_id: requestId,
           amount: params.amount,
           currency: params.currency ?? "XLM",
           error_message: null,
@@ -176,6 +182,7 @@ export async function acquireSettlementIntent(
   try {
     const insertPayload: SettlementIntentInsert = {
       idempotency_key: idempotencyKey,
+      request_id: requestId,
       trip_id: params.tripId || "none",
       expense_id: params.expenseId,
       member_id: params.memberId,

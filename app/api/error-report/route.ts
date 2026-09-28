@@ -20,8 +20,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/auth/rateLimiter";
+import {
+  REQUEST_ID_HEADER,
+  createRequestId,
+  parseRequestId,
+} from "@/lib/observability/requestId";
 
 interface IncomingReport {
+  requestId?: string;
   name?: string;
   message?: string;
   stack?: string;
@@ -127,6 +133,14 @@ function sanitizeContext(value: unknown): Record<string, unknown> | undefined {
 }
 
 export async function POST(req: NextRequest) {
+  const headerRequestId = parseRequestId(req.headers.get(REQUEST_ID_HEADER));
+  let requestId = headerRequestId ?? createRequestId();
+  const responseHeaders = (extra?: Record<string, string>) => ({
+    "Cache-Control": "no-store",
+    [REQUEST_ID_HEADER]: requestId,
+    ...extra,
+  });
+
   // Rate limit before reading the body: an abusive caller should not get to
   // spend server memory on a payload we are about to discard anyway.
   const clientIp = getClientIp(req);
@@ -137,13 +151,16 @@ export async function POST(req: NextRequest) {
   );
   if (!ipLimit.allowed) {
     return NextResponse.json(
-      { ok: false, error: "Too many error reports. Please try again later." },
+      {
+        ok: false,
+        error: "Too many error reports. Please try again later.",
+        requestId,
+      },
       {
         status: 429,
-        headers: {
+        headers: responseHeaders({
           "Retry-After": String(Math.ceil(ipLimit.resetMs / 1000)),
-          "Cache-Control": "no-store",
-        },
+        }),
       },
     );
   }
@@ -152,7 +169,10 @@ export async function POST(req: NextRequest) {
   // common case costs nothing to refuse.
   const declaredLength = Number(req.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ ok: false, error: "payload too large" }, { status: 413 });
+    return NextResponse.json(
+      { ok: false, error: "payload too large", requestId },
+      { status: 413, headers: responseHeaders() },
+    );
   }
 
   // Content-Length is client-supplied and optional (e.g. chunked uploads), so
@@ -161,26 +181,42 @@ export async function POST(req: NextRequest) {
   try {
     raw = await req.text();
   } catch {
-    return NextResponse.json({ ok: false, error: "invalid body" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "invalid body", requestId },
+      { status: 400, headers: responseHeaders() },
+    );
   }
 
   if (raw.length > MAX_BODY_BYTES) {
-    return NextResponse.json({ ok: false, error: "payload too large" }, { status: 413 });
+    return NextResponse.json(
+      { ok: false, error: "payload too large", requestId },
+      { status: 413, headers: responseHeaders() },
+    );
   }
 
   let body: IncomingReport;
   try {
     body = JSON.parse(raw) as IncomingReport;
   } catch {
-    return NextResponse.json({ ok: false, error: "invalid json" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "invalid json", requestId },
+      { status: 400, headers: responseHeaders() },
+    );
   }
 
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return NextResponse.json({ ok: false, error: "invalid json" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "invalid json", requestId },
+      { status: 400, headers: responseHeaders() },
+    );
+  }
+
+  if (!headerRequestId) {
+    requestId = parseRequestId(body.requestId) ?? requestId;
   }
 
   const receivedAt = new Date().toISOString();
-  const clean: Record<string, unknown> = { receivedAt };
+  const clean: Record<string, unknown> = { requestId, receivedAt };
   for (const key of ALLOWED_KEYS) {
     const value = body[key];
     if (value === undefined) continue;
@@ -206,7 +242,10 @@ export async function POST(req: NextRequest) {
     try {
       await fetch(webhook, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          [REQUEST_ID_HEADER]: requestId,
+        },
         body: JSON.stringify(clean),
         // Without this, a hung incident hook holds the request open and each
         // report ties up a server slot until the platform kills it.
@@ -217,9 +256,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true }, { status: 202 });
+  return NextResponse.json(
+    { ok: true, requestId },
+    { status: 202, headers: responseHeaders() },
+  );
 }
 
-export function GET() {
-  return NextResponse.json({ ok: true });
+export function GET(req: NextRequest) {
+  const requestId = parseRequestId(req.headers.get(REQUEST_ID_HEADER)) ?? createRequestId();
+  return NextResponse.json(
+    { ok: true, requestId },
+    { headers: { [REQUEST_ID_HEADER]: requestId } },
+  );
 }
