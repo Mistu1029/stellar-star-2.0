@@ -44,6 +44,7 @@ import {
   reconcileSettlementIntent,
   reconcilePendingIntentsForWallet,
 } from "@/lib/settlement/reconcile";
+import { validateAmount } from "@/lib/expense/validation";
 import type { SplitShare } from "@/types/expense";
 
 // ---------------------------------------------------------------------------
@@ -193,6 +194,11 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         toastError("Wallet not connected", "Please connect your Freighter wallet first.");
         return false;
       }
+      const amountError = validateAmount(amountXlm, "XLM");
+      if (amountError) {
+        toastError("Invalid deposit amount", amountError);
+        return false;
+      }
       setDepositLoading(true);
       try {
         const result = await depositPoolBalance(publicKey, amountXlm);
@@ -321,6 +327,12 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
       if (!publicKey) {
         toastError("Wallet not connected", "Please connect your Freighter wallet first.");
+        return;
+      }
+
+      const amountError = validateAmount(share.amount, "XLM");
+      if (amountError) {
+        toastError("Invalid payment amount", amountError);
         return;
       }
 
