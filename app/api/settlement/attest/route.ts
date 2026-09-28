@@ -38,6 +38,10 @@ import {
   inspectAllocation,
   isDurable,
 } from "@/lib/settlement/attestationLedger";
+import {
+  REQUEST_ID_HEADER,
+  getOrCreateRequestId,
+} from "@/lib/observability/requestId";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,8 +65,28 @@ interface AttestRequestBody {
   txHash?: unknown;
 }
 
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
+function responseHeaders(requestId: string): Record<string, string> {
+  return {
+    "Cache-Control": "no-store",
+    [REQUEST_ID_HEADER]: requestId,
+  };
+}
+
+function jsonError(message: string, status: number, requestId: string) {
+  return NextResponse.json(
+    { error: message, requestId },
+    { status, headers: responseHeaders(requestId) },
+  );
+}
+
+function logAttestationError(requestId: string, event: string, error: unknown): void {
+  console.error(
+    `[StellarStar:settlement-attest] ${JSON.stringify({
+      requestId,
+      event,
+      message: error instanceof Error ? error.message : String(error),
+    })}`,
+  );
 }
 
 function isStellarAddress(value: unknown): value is string {
@@ -79,6 +103,8 @@ function oraclePublicKeyOrThrow(): string {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = getOrCreateRequestId(request.headers.get(REQUEST_ID_HEADER));
+
   // ── Deployment prerequisites ───────────────────────────────────────────────
   // 503 rather than 500: invariant 5 says the client must be able to tell
   // "the oracle cannot answer right now" (degrade to off-chain, retry later)
@@ -87,12 +113,14 @@ export async function POST(request: NextRequest) {
     return jsonError(
       "Settlement contract or asset is not configured on this deployment.",
       503,
+      requestId,
     );
   }
   if (!isOracleConfigured()) {
     return jsonError(
       "The settlement oracle has no signing key configured. On-chain settlement is unavailable.",
       503,
+      requestId,
     );
   }
 
@@ -100,7 +128,7 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as AttestRequestBody;
   } catch {
-    return jsonError("Request body must be JSON.", 400);
+    return jsonError("Request body must be JSON.", 400, requestId);
   }
 
   const { tripId, expenseId, payer, member, amountStroops, txHash } = body;
@@ -115,16 +143,16 @@ export async function POST(request: NextRequest) {
     typeof txHash !== "string" ||
     !/^[0-9a-fA-F]{64}$/.test(txHash)
   ) {
-    return jsonError("Missing or malformed attestation request fields.", 400);
+    return jsonError("Missing or malformed attestation request fields.", 400, requestId);
   }
 
   if (payer === member) {
-    return jsonError("Payer and member must be different accounts.", 400);
+    return jsonError("Payer and member must be different accounts.", 400, requestId);
   }
 
   const claimedAmount = BigInt(amountStroops);
   if (claimedAmount <= 0n) {
-    return jsonError("Amount must be greater than zero.", 400);
+    return jsonError("Amount must be greater than zero.", 400, requestId);
   }
 
   // ── Caller must be the member ──────────────────────────────────────────────
@@ -136,10 +164,18 @@ export async function POST(request: NextRequest) {
   const session = token ? verifyWalletSession(token) : null;
 
   if (!session) {
-    return jsonError("A valid wallet session is required to request an attestation.", 401);
+    return jsonError(
+      "A valid wallet session is required to request an attestation.",
+      401,
+      requestId,
+    );
   }
   if (session.wallet_address !== member) {
-    return jsonError("You may only request attestations for your own settlements.", 403);
+    return jsonError(
+      "You may only request attestations for your own settlements.",
+      403,
+      requestId,
+    );
   }
 
   const normalisedTxHash = txHash.toLowerCase();
@@ -147,15 +183,16 @@ export async function POST(request: NextRequest) {
   // ── Independent Horizon verification ───────────────────────────────────────
   let payment;
   try {
-    payment = await verifyPaymentByHash(normalisedTxHash);
+    payment = await verifyPaymentByHash(normalisedTxHash, requestId);
   } catch (err) {
     if (err instanceof HorizonVerificationError) {
       // Transient Horizon trouble is an availability problem, not a verdict on
       // the claim, so it must not be reported as a rejection.
-      return jsonError(err.message, err.transient ? 503 : 422);
+      logAttestationError(requestId, "horizon-verification-failed", err);
+      return jsonError(err.message, err.transient ? 503 : 422, requestId);
     }
-    console.error("[settlement/attest] Horizon verification error:", err);
-    return jsonError("Could not verify the transaction.", 503);
+    logAttestationError(requestId, "horizon-verification-error", err);
+    return jsonError("Could not verify the transaction.", 503, requestId);
   }
 
   // Horizon's answer is the source of truth. The request's assertions are only
@@ -165,10 +202,15 @@ export async function POST(request: NextRequest) {
     return jsonError(
       "The transaction was not sent by your account, so it cannot settle your debt.",
       422,
+      requestId,
     );
   }
   if (payment.destination !== payer) {
-    return jsonError("The transaction was not sent to the payer of this expense.", 422);
+    return jsonError(
+      "The transaction was not sent to the payer of this expense.",
+      422,
+      requestId,
+    );
   }
 
   // ── Allocation: one payment cannot settle the same debt twice, nor more
@@ -212,10 +254,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     if (err instanceof OracleKeyUnavailableError) {
-      return jsonError(err.message, 503);
+      return jsonError(err.message, 503, requestId);
     }
-    console.error("[settlement/attest] Allocation error:", err);
-    return jsonError("The attestation ledger is unavailable.", 503);
+    logAttestationError(requestId, "allocation-error", err);
+    return jsonError("The attestation ledger is unavailable.", 503, requestId);
   }
 
   if (!allocationResult.success) {
@@ -223,6 +265,7 @@ export async function POST(request: NextRequest) {
       return jsonError(
         "This expense was already attested against this transaction for a different amount.",
         409,
+        requestId,
       );
     }
     return jsonError(
@@ -230,6 +273,7 @@ export async function POST(request: NextRequest) {
         `${allocationResult.allocatedStroops} are already attested. It cannot cover a further ` +
         `${claimedAmount}.`,
       422,
+      requestId,
     );
   }
 
@@ -241,6 +285,7 @@ export async function POST(request: NextRequest) {
     return jsonError(
       err instanceof Error ? err.message : "Oracle key unavailable.",
       503,
+      requestId,
     );
   }
 
@@ -268,6 +313,6 @@ export async function POST(request: NextRequest) {
       durableLedger: isDurable(),
       ledger: payment.ledger,
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: responseHeaders(requestId) },
   );
 }

@@ -273,6 +273,7 @@ function attestationToScVal(attestation: Attestation): xdr.ScVal {
 }
 
 export interface RecordPaymentParams {
+  requestId?: string;
   memberPublicKey: string;
   tripId: string;
   expenseId: string;
@@ -497,6 +498,7 @@ export async function recordPaymentOnChain(
     txHash,
     attestation,
     onStatus,
+    requestId,
   } = params;
 
   try {
@@ -549,7 +551,7 @@ export async function recordPaymentOnChain(
     return { success: true, ledger };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Contract call failed.";
-    reportError("contract.recordPaymentOnChain", err, { message });
+    reportError("contract.recordPaymentOnChain", err, { message }, "error", requestId);
     return { success: false, error: message };
   }
 }
@@ -567,6 +569,7 @@ export interface NetSettlementDebt {
 }
 
 export interface RecordNetSettlementParams {
+  requestId?: string;
   memberPublicKey: string;
   tripId: string;
   payerPublicKey: string;
@@ -589,6 +592,7 @@ export async function recordNetSettlementOnChain(
     txHash,
     debts,
     onStatus,
+    requestId,
   } = params;
 
   try {
@@ -641,7 +645,7 @@ export async function recordNetSettlementOnChain(
     return { success: true, ledger };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Contract call failed.";
-    reportError("contract.recordNetSettlementOnChain", err, { message });
+    reportError("contract.recordNetSettlementOnChain", err, { message }, "error", requestId);
     return { success: false, error: message };
   }
 }

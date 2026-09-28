@@ -25,6 +25,7 @@ import {
   STELLAR_NETWORK,
 } from "@/lib/utils/constants";
 import { reportError } from "@/lib/observability/reportError";
+import { createRequestId } from "@/lib/observability/requestId";
 import { networkMismatchMessage } from "@/lib/stellar/networkMismatch";
 import {
   savePendingOnChain,
@@ -267,6 +268,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
   const retryOnChainRecord = useCallback(async () => {
     if (!pendingOnChain) return;
+    const requestId = createRequestId();
 
     const poolCheck = await precheckPoolBalance(
       pendingOnChain.memberPublicKey,
@@ -290,7 +292,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
     // The oracle re-verifies against Horizon itself; there is no point doing a
     // client-side check first, and its verdict would carry no weight anyway.
-    const attested = await fetchAttestation(pendingOnChain);
+    const attested = await fetchAttestation({ ...pendingOnChain, requestId });
 
     if (!attested.ok) {
       setPaymentState({
@@ -309,6 +311,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
     const contractResult = await recordPaymentOnChain({
       ...pendingOnChain,
+      requestId,
       attestation: attested.attestation,
       onStatus: (step) => setPaymentState({ status: "recording", step }),
     });
@@ -344,6 +347,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
 
   const payShare = useCallback(
     async ({ share, expenseTitle, payerWalletAddress, tripId }: PayShareParams) => {
+      const requestId = createRequestId();
+
       if (!publicKey) {
         toastError("Wallet not connected", "Please connect your Freighter wallet first.");
         return;
@@ -357,12 +362,18 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       if (mismatchMsg) {
         setPaymentState({ status: "blocked", message: mismatchMsg });
         toastError("Network mismatch", mismatchMsg);
-        reportError("payment.blocked-network-mismatch", new Error(mismatchMsg), {
-          stage: "payShare",
-          amount: share.amount,
-          walletNetwork: network,
-          appNetwork: STELLAR_NETWORK,
-        });
+        reportError(
+          "payment.blocked-network-mismatch",
+          new Error(mismatchMsg),
+          {
+            stage: "payShare",
+            amount: share.amount,
+            walletNetwork: network,
+            appNetwork: STELLAR_NETWORK,
+          },
+          "error",
+          requestId,
+        );
         return;
       }
 
@@ -394,6 +405,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       let intent: SettlementIntent | null = null;
       try {
         const intentResult = await acquireSettlementIntent({
+          requestId,
           tripId: tripId ?? "none",
           expenseId,
           memberId: share.memberId,
@@ -433,7 +445,13 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
           intent = intentResult.intent;
         }
       } catch (err) {
-        console.warn("[usePayment] Durable intent acquire warning:", err);
+        reportError(
+          "settlement.intent-acquire-failed",
+          err,
+          { stage: "payShare", tripId, expenseId },
+          "warning",
+          requestId,
+        );
       }
 
       try {
@@ -464,7 +482,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
 
         setPaymentState({ status: "submitting" });
-        const result = await submitSignedTransaction(signedXDR);
+        const result = await submitSignedTransaction(signedXDR, requestId);
 
         // Update durable intent immediately upon successful Horizon submission (Money has moved!)
         if (intent) {
@@ -485,6 +503,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
           // The settlement proof now comes from the oracle, which checks
           // Horizon server-side. The client no longer verifies its own claim.
           const attested = await fetchAttestation({
+            requestId,
             tripId,
             expenseId,
             payerPublicKey: payerWalletAddress,
@@ -498,6 +517,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
             buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, share.amount, tripId, memoText);
           } else {
             const contractResult = await recordPaymentOnChain({
+              requestId,
               memberPublicKey: publicKey,
               tripId,
               expenseId,
@@ -536,13 +556,19 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
             onChain: false,
             message: onChainError,
           });
-          reportError("payment.onchain-proof-failed", new Error(onChainError), {
-            stage: "payShare",
-            hash: result.hash,
-            ledger: result.ledger,
-            amount: share.amount,
-            tripId,
-          });
+          reportError(
+            "payment.onchain-proof-failed",
+            new Error(onChainError),
+            {
+              stage: "payShare",
+              hash: result.hash,
+              ledger: result.ledger,
+              amount: share.amount,
+              tripId,
+            },
+            "error",
+            requestId,
+          );
           toastInfo(
             "Payment sent — recorded off-chain only",
             "The XLM transfer succeeded, but this settlement has no on-chain proof yet. Use retry to add it.",
@@ -568,11 +594,17 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
         const display    = isRejected ? "Transaction cancelled in wallet." : message;
 
       setPaymentState({ status: "error", message: display });
-      reportError("payment.failed", err, {
-        stage: "payShare",
-        amount: share.amount,
-        tripId,
-      });
+      reportError(
+        "payment.failed",
+        err,
+        {
+          stage: "payShare",
+          amount: share.amount,
+          tripId,
+        },
+        "error",
+        requestId,
+      );
       toastError("Payment failed", display);
     }
     },
