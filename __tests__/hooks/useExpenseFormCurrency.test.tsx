@@ -124,6 +124,29 @@ describe("useExpenseForm currency freshness (issue #222)", () => {
     expect((addExpense.mock.calls[0][0] as Expense).currency).toBe("INR");
   });
 
+  it("converts a fractional fiat amount without floating-point drift", async () => {
+    mockedFetchRate.mockResolvedValue({
+      rate: "0.123456789",
+      fetchedAtIso: "2026-01-01T00:00:00.000Z",
+      stale: false,
+      rateAgeMs: 0,
+      source: "test",
+    } as Awaited<ReturnType<typeof fetchExchangeRate>>);
+
+    const hook = renderHook(() => useExpenseForm({ defaultMembers }));
+    await act(async () => {
+      hook.result.current.setTitle("Exact conversion");
+      hook.result.current.setTotalAmount("10.01");
+      hook.result.current.setCurrency("USD");
+    });
+    await act(async () => {
+      await hook.result.current.handleSubmit(submitEvent());
+    });
+
+    await waitFor(() => expect(addExpense).toHaveBeenCalledTimes(1));
+    expect((addExpense.mock.calls[0][0] as Expense).totalAmount).toBe("1.2358025");
+  });
+
   it("honours the degraded path for the freshly selected currency", async () => {
     // Rate unavailable: the expense must not be created, and the form must say
     // so naming the currency the user actually chose.

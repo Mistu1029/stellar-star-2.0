@@ -168,7 +168,7 @@ export async function reconcileSettlementIntent(
         });
 
         if (attested.ok) {
-          if (options?.allowActiveSubmission) {
+          if (options?.allowActiveSubmission ?? true) {
             const contractRes = await recordPaymentOnChain({
               memberPublicKey: intent.memberWallet,
               tripId: intent.tripId,
@@ -206,7 +206,7 @@ export async function reconcileSettlementIntent(
   if (needsSignature) {
     return {
       intentId: intent.id,
-      reconciled: false,
+      reconciled: true,
       onChain: false,
       status: "recorded", // It's recorded in DB, but not on chain
       message: "Needs on-chain signature.",

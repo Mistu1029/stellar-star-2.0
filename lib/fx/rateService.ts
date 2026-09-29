@@ -53,6 +53,7 @@ import { CircuitBreaker } from "./circuitBreaker";
 import { CoinGeckoProvider } from "./providers/coingecko";
 import { ExchangeRateProvider } from "./providers/exchangerate";
 import { normalizeCurrency } from "./currencies";
+import { normalizeDecimalRate } from "@/lib/money/assetPrecision";
 
 // ── Freshness policies ────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export class FxRateService {
       const fetchedAt = this.now();
       return {
         rate: 1,
+        rateDecimal: "1",
         source: "identity",
         fetchedAt,
         stale: false,
@@ -189,10 +191,13 @@ export class FxRateService {
       const rate = await breaker.call(() => provider.fetch(from, to));
 
       if (rate !== null) {
+        const rateDecimal = normalizeDecimalRate(rate);
+        if (rateDecimal === null) continue;
         const fetchedAt = this.now();
-        this.cache.set(from, to, rate, provider.name, policy, fetchedAt);
+        this.cache.set(from, to, rate, provider.name, policy, fetchedAt, rateDecimal);
         return {
           rate,
+          rateDecimal,
           source: provider.name,
           fetchedAt,
           stale: false,
