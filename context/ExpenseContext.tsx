@@ -11,9 +11,11 @@ import {
   deleteExpenseRow,
   detachExpenseFromTrips,
   markSharePaidRow,
+  cacheDomainsForMutation,
   rowToExpense,
 } from "@/lib/supabase/queries";
 import { useRealtimeCollection } from "@/lib/supabase/useRealtimeCollection";
+import { invalidateQueryCaches } from "@/lib/supabase/cacheInvalidation";
 import { useWalletContext } from "./WalletContext";
 
 interface ExpenseContextType {
@@ -67,6 +69,11 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         mutate((previous) =>
           previous.map((e) => (e.id === saved.id ? saved : e))
         );
+        invalidateQueryCaches({
+          wallet,
+          domains: cacheDomainsForMutation("expense_write"),
+          expenseId: saved.id,
+        });
       } catch (err: any) {
         mutate((previous) => previous.filter((e) => e.id !== expense.id));
         toastError("Failed to add expense", "An error occurred while saving.");
@@ -90,13 +97,20 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
       try {
         const saved = await updateExpenseRow(id, updates, snapshot);
         mutate((previous) => previous.map((e) => (e.id === id ? saved : e)));
+        if (wallet) {
+          invalidateQueryCaches({
+            wallet,
+            domains: cacheDomainsForMutation("expense_write"),
+            expenseId: id,
+          });
+        }
       } catch (err: any) {
         mutate((previous) => previous.map((e) => (e.id === id ? snapshot : e)));
         toastError("Failed to update expense", "Reverting to previous state.");
         throw err;
       }
     },
-    [expenses, mutate, toastError]
+    [expenses, mutate, toastError, wallet]
   );
 
   const deleteExpense = useCallback(
@@ -111,6 +125,13 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         // left pointing at an expense that no longer exists.
         await detachExpenseFromTrips(id);
         await deleteExpenseRow(id);
+        if (wallet) {
+          invalidateQueryCaches({
+            wallet,
+            domains: cacheDomainsForMutation("expense_write"),
+            expenseId: id,
+          });
+        }
       } catch (err: any) {
         mutate((previous) => {
           if (previous.some((e) => e.id === id)) return previous;
@@ -120,7 +141,7 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
         throw err;
       }
     },
-    [expenses, mutate, toastError]
+    [expenses, mutate, toastError, wallet]
   );
 
   /**
@@ -136,8 +157,15 @@ export function ExpenseProvider({ children }: { children: React.ReactNode }) {
     async (expenseId: string, memberId: string, txHash: string) => {
       const saved = await markSharePaidRow(expenseId, memberId, txHash);
       mutate((previous) => previous.map((e) => (e.id === expenseId ? saved : e)));
+      if (wallet) {
+        invalidateQueryCaches({
+          wallet,
+          domains: cacheDomainsForMutation("expense_write"),
+          expenseId,
+        });
+      }
     },
-    [mutate]
+    [mutate, wallet]
   );
 
   const getExpense = useCallback((id: string) => expensesRef.current.find((e) => e.id === id), []);
