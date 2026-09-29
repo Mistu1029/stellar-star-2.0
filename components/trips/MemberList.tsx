@@ -1,32 +1,21 @@
 "use client";
 
-import { ExternalLink, UserPlus, Link2 } from "lucide-react";
+import React from "react";
+import { ExternalLink } from "lucide-react";
 import type { Member } from "@/types/expense";
 import { normalizeWalletAddress } from "@/lib/trip/members";
-export { MemberList } from "./MemberList";
 
-interface TripMembersListProps {
+export interface MemberListProps {
   members: Member[];
-  onOpenInvite?: () => void;
+  className?: string;
 }
 
-export function TripMembersList({ members, onOpenInvite }: TripMembersListProps) {
+export function MemberList({ members, className = "" }: MemberListProps) {
   return (
-    <div className="mt-4 pt-4 border-t border-[#F5F5F5]">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase tracking-wider font-semibold text-[#AAA]">
-          Members ({members.length})
-        </p>
-        {onOpenInvite && (
-          <button
-            onClick={onOpenInvite}
-            className="flex items-center gap-1 text-[11px] font-semibold text-[#0F766E] hover:text-[#0D5F58] hover:underline transition-all"
-          >
-            <UserPlus size={12} />
-            Invite Friend
-          </button>
-        )}
-      </div>
+    <div className={`mt-4 pt-4 border-t border-[#F5F5F5] ${className}`}>
+      <p className="text-[10px] uppercase tracking-wider font-semibold text-[#AAA] mb-2">
+        Members
+      </p>
       <div className="flex flex-wrap gap-2">
         {members.map((member) => {
           const canonicalWallet = member.walletAddress
@@ -47,6 +36,7 @@ export function TripMembersList({ members, onOpenInvite }: TripMembersListProps)
                   href={`https://stellar.expert/explorer/testnet/account/${canonicalWallet}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={`View explorer account for ${canonicalWallet}`}
                   className="text-[#CCC] hover:text-[#888]"
                 >
                   <ExternalLink size={9} />
@@ -60,3 +50,4 @@ export function TripMembersList({ members, onOpenInvite }: TripMembersListProps)
   );
 }
 
+export default MemberList;

@@ -338,10 +338,11 @@ export async function fetchUserByWallet(
   walletAddress: string,
   client: StellarStarClient = requireSupabaseClient()
 ): Promise<UserProfile | null> {
+  const normalized = walletAddress?.trim().toUpperCase();
   const { data, error } = await client
     .from("users")
     .select(USER_COLUMNS)
-    .eq("wallet_address", walletAddress)
+    .eq("wallet_address", normalized)
     .maybeSingle();
 
   // `maybeSingle` returns null rather than erroring when nothing matched, so a
@@ -355,7 +356,7 @@ export async function fetchUsersByWallets(
   walletAddresses: string[],
   client: StellarStarClient = requireSupabaseClient()
 ): Promise<UserProfile[]> {
-  const unique = [...new Set(walletAddresses.filter(Boolean))];
+  const unique = [...new Set(walletAddresses.filter(Boolean).map((a) => a.trim().toUpperCase()))];
   if (unique.length === 0) return [];
 
   const { data, error } = await client
@@ -381,11 +382,12 @@ export async function upsertUserProfile(
   client: StellarStarClient = requireAuthenticatedClient()
 ): Promise<UserProfile> {
   const now = new Date().toISOString();
+  const normalized = walletAddress.trim().toUpperCase();
   const result = await client
     .from("users")
     .upsert(
       {
-        wallet_address: walletAddress,
+        wallet_address: normalized,
         display_name: displayName,
         last_login_at: now,
         updated_at: now,

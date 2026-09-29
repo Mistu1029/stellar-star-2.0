@@ -145,7 +145,8 @@ export function useExpenseForm({
       try {
         const cleanMembers = members.map((member) => ({
           ...member,
-          walletAddress: member.walletAddress?.trim(),
+          name: member.name.trim(),
+          walletAddress: member.walletAddress ? member.walletAddress.trim().toUpperCase() : undefined,
         }));
         let finalSettlementAmount = toLedgerAmount(totalAmount, "XLM");
         let exchangeRate: string | undefined = undefined;

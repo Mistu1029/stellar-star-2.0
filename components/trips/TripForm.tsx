@@ -38,7 +38,7 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
       {
         id: crypto.randomUUID(),
         name: currentUserName ?? "",
-        walletAddress: currentUserPublicKey ?? "",
+        walletAddress: currentUserPublicKey ? currentUserPublicKey.trim().toUpperCase() : "",
       },
       createMember(),
     ];
@@ -101,7 +101,7 @@ export function TripForm({ onSubmit, onCancel, initialData, currentUserPublicKey
         .map((m) => ({
           ...m,
           name: m.name.trim(),
-          walletAddress: m.walletAddress?.trim() || undefined,
+          walletAddress: m.walletAddress ? m.walletAddress.trim().toUpperCase() : undefined,
         })),
     });
   };
