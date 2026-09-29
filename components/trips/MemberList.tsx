@@ -1,13 +1,18 @@
 "use client";
 
+import React from "react";
 import { ExternalLink } from "lucide-react";
 import type { Member } from "@/types/expense";
 import { normalizeWalletAddress } from "@/lib/trip/members";
-export { MemberList } from "./MemberList";
 
-export function TripMembersList({ members }: { members: Member[] }) {
+export interface MemberListProps {
+  members: Member[];
+  className?: string;
+}
+
+export function MemberList({ members, className = "" }: MemberListProps) {
   return (
-    <div className="mt-4 pt-4 border-t border-[#F5F5F5]">
+    <div className={`mt-4 pt-4 border-t border-[#F5F5F5] ${className}`}>
       <p className="text-[10px] uppercase tracking-wider font-semibold text-[#AAA] mb-2">
         Members
       </p>
@@ -31,6 +36,7 @@ export function TripMembersList({ members }: { members: Member[] }) {
                   href={`https://stellar.expert/explorer/testnet/account/${canonicalWallet}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={`View explorer account for ${canonicalWallet}`}
                   className="text-[#CCC] hover:text-[#888]"
                 >
                   <ExternalLink size={9} />
@@ -44,3 +50,4 @@ export function TripMembersList({ members }: { members: Member[] }) {
   );
 }
 
+export default MemberList;

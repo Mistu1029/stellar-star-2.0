@@ -66,7 +66,10 @@ export function decodeClaims(token: string): SessionClaims | null {
     ) {
       return null;
     }
-    return claims as SessionClaims;
+    return {
+      ...claims,
+      wallet_address: claims.wallet_address.trim().toUpperCase(),
+    } as SessionClaims;
   } catch {
     return null;
   }
@@ -138,7 +141,9 @@ export function getSessionWallet(): string | null {
  */
 export function hasSessionFor(walletAddress: string | null | undefined): boolean {
   if (!walletAddress) return false;
-  return getSessionWallet() === walletAddress;
+  const sessionWallet = getSessionWallet();
+  if (!sessionWallet) return false;
+  return sessionWallet.trim().toUpperCase() === walletAddress.trim().toUpperCase();
 }
 
 export function setSession(token: string): Session {

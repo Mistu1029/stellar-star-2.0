@@ -64,6 +64,11 @@ describe("wallet session store", () => {
       expect(typeof claims?.exp).toBe("number");
     });
 
+    it("normalizes a lowercased or untrimmed wallet address in token claims", () => {
+      const claims = decodeClaims(mintToken({ wallet: `  ${WALLET.toLowerCase()}  ` }));
+      expect(claims?.wallet_address).toBe(WALLET);
+    });
+
     it("returns null for a token that is not a JWT", () => {
       expect(decodeClaims("not-a-token")).toBeNull();
       expect(decodeClaims("")).toBeNull();
@@ -127,6 +132,8 @@ describe("wallet session store", () => {
       setSession(mintToken({ wallet: WALLET }));
 
       expect(hasSessionFor(WALLET)).toBe(true);
+      expect(hasSessionFor(WALLET.toLowerCase())).toBe(true);
+      expect(hasSessionFor(`  ${WALLET.toLowerCase()}  `)).toBe(true);
       expect(hasSessionFor("GBSOMEOTHERWALLET")).toBe(false);
       expect(hasSessionFor(null)).toBe(false);
     });
