@@ -20,6 +20,7 @@ import type {
   SettlementIntentInsert,
   SettlementIntentRow,
   SettlementIntentUpdate,
+  Json,
 } from "@/types/supabase";
 import { requireAuthenticatedClient, requireSupabaseClient, type StellarStarClient } from "./client";
 import {
@@ -169,6 +170,7 @@ export function rowToTrip(row: TripRow): Trip {
 export interface SettlementIntent {
   id: string;
   idempotencyKey: string;
+  requestId: string;
   tripId: string;
   expenseId: string;
   memberId: string;
@@ -191,6 +193,7 @@ export function rowToSettlementIntent(row: SettlementIntentRow): SettlementInten
   return {
     id: row.id,
     idempotencyKey: row.idempotency_key,
+    requestId: row.request_id,
     tripId: row.trip_id,
     expenseId: row.expense_id,
     memberId: row.member_id,
@@ -482,8 +485,11 @@ export async function updateExpenseRow(
         p_settled: updates.settled !== undefined ? updates.settled : null,
       });
 
-      if (!rpcError && rpcData) {
-        return rowToExpense(rpcData as ExpenseRow);
+      // `update_expense_versioned` is declared RETURNS SETOF public.expenses, so
+      // supabase-js hands back an array. Treating it as a single row produced an
+      // Expense whose every field was undefined.
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        return rowToExpense(rpcData[0] as ExpenseRow);
       }
 
       // Check if it was a version conflict
@@ -578,8 +584,9 @@ export async function markSharePaidRow(
       p_on_chain: false,
     });
 
-    if (!rpcError && rpcData) {
-      return rowToExpense(rpcData as ExpenseRow);
+    // RETURNS SETOF public.expenses — an array, even for a single row.
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+      return rowToExpense(rpcData[0] as ExpenseRow);
     }
   } catch {
     // Fall back to client-side optimistic atomic write
@@ -907,3 +914,16 @@ export async function checkConnection(): Promise<ConnectionStatus> {
   }
   return { ok: false, needsSetup: false, message: error.message };
 }
+
+// ─── Invitations ─────────────────────────────────────────────────────────────
+
+export {
+  createTripInvite,
+  verifyTripInvite,
+  claimTripInvite,
+  revokeTripInvite,
+  fetchTripInvites,
+  type CreateInviteParams,
+  type CreateInviteResult,
+  type ClaimInviteResult,
+} from "@/lib/invitations/claim";

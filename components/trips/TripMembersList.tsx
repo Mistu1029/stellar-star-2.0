@@ -1,16 +1,32 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, UserPlus, Link2 } from "lucide-react";
 import type { Member } from "@/types/expense";
 import { normalizeWalletAddress } from "@/lib/trip/members";
 export { MemberList } from "./MemberList";
 
-export function TripMembersList({ members }: { members: Member[] }) {
+interface TripMembersListProps {
+  members: Member[];
+  onOpenInvite?: () => void;
+}
+
+export function TripMembersList({ members, onOpenInvite }: TripMembersListProps) {
   return (
     <div className="mt-4 pt-4 border-t border-[#F5F5F5]">
-      <p className="text-[10px] uppercase tracking-wider font-semibold text-[#AAA] mb-2">
-        Members
-      </p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] uppercase tracking-wider font-semibold text-[#AAA]">
+          Members ({members.length})
+        </p>
+        {onOpenInvite && (
+          <button
+            onClick={onOpenInvite}
+            className="flex items-center gap-1 text-[11px] font-semibold text-[#0F766E] hover:text-[#0D5F58] hover:underline transition-all"
+          >
+            <UserPlus size={12} />
+            Invite Friend
+          </button>
+        )}
+      </div>
       <div className="flex flex-wrap gap-2">
         {members.map((member) => {
           const canonicalWallet = member.walletAddress

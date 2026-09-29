@@ -7,9 +7,12 @@ import {
   calculateSplit,
   findDuplicateWalletErrors,
   isValidStellarAddress,
-  isValidXLMAmount,
 } from "@/lib/split/calculator";
+import { validateAmount } from "@/lib/expense/validation";
 import type { Expense, Member, SplitMode } from "@/types/expense";
+import { fetchExchangeRate, describeAge } from "@/lib/fx/quote";
+import { getAssetConfig } from "@/lib/money/format";
+import { parse, format } from "@/lib/money/amount";
 
 export interface UseExpenseFormOptions {
   onSuccess?: (expenseId?: string) => void;
@@ -38,10 +41,10 @@ export function validateExpenseFormFields({
   const errors: Record<string, string> = {};
 
   if (!title.trim()) errors.title = "Title is required.";
-  if (!totalAmount || Number.isNaN(parseFloat(totalAmount)) || parseFloat(totalAmount) <= 0) {
-    errors.totalAmount = `Enter a valid ${currency} amount.`;
-  } else if (currency === "XLM" && !isValidXLMAmount(totalAmount)) {
-    errors.totalAmount = "Enter a valid XLM amount (max 7 decimal places, e.g. 10.5).";
+
+  const amountError = validateAmount(totalAmount, currency);
+  if (amountError) {
+    errors.totalAmount = amountError;
   }
 
   members.forEach((member, index) => {
@@ -50,9 +53,7 @@ export function validateExpenseFormFields({
     }
 
     const raw = member.walletAddress?.trim() ?? "";
-    if (!raw) {
-      errors[`member_addr_${index}`] = "Stellar address is required to enable payments.";
-    } else if (!isValidStellarAddress(raw)) {
+    if (raw && !isValidStellarAddress(raw)) {
       errors[`member_addr_${index}`] = "Invalid Stellar address (must start with G, 56 chars).";
     }
   });
@@ -70,6 +71,7 @@ export function validateExpenseFormFields({
 }
 
 
+
 export function useExpenseForm({
   onSuccess,
   currentUserPublicKey,
@@ -77,7 +79,7 @@ export function useExpenseForm({
   defaultMembers,
 }: UseExpenseFormOptions) {
   const { addExpense } = useExpense();
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
   const initialMembersRef = useRef<Member[] | null>(null);
 
   if (!initialMembersRef.current) {
@@ -93,6 +95,12 @@ export function useExpenseForm({
   const [paidByMemberId, setPaidByMemberId] = useState(initialMembersRef.current![0]?.id ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /**
+   * True when the FX service could not price the chosen currency at submit
+   * time. The form stays filled in so the user can switch to XLM and retry —
+   * an outage at a third party must not discard what they typed.
+   */
+  const [rateUnavailable, setRateUnavailable] = useState(false);
 
   const namedMembers = useMemo(() => members.filter((member) => member.name.trim()), [members]);
   const shares = useMemo(() => {
@@ -133,6 +141,7 @@ export function useExpenseForm({
       if (!validate()) return;
 
       setSubmitting(true);
+      setRateUnavailable(false);
       try {
         const cleanMembers = members.map((member) => ({
           ...member,
@@ -144,14 +153,36 @@ export function useExpenseForm({
         let exchangeRateTimestamp: string | undefined = undefined;
 
         if (currency !== "XLM") {
-          const res = await fetch(`/api/fx/rate?from=${currency}&to=XLM`);
-          if (!res.ok) throw new Error("Failed to fetch exchange rate");
-          const data = await res.json();
-          if (data.error) throw new Error(data.error);
-          
-          exchangeRate = data.rate;
-          exchangeRateTimestamp = data.timestamp;
-          finalXlmAmount = finalXlmAmount * parseFloat(exchangeRate!);
+          const quote = await fetchExchangeRate(currency);
+
+          if (quote === null) {
+            // Invariant: rate unavailability never blocks expense creation.
+            // The degraded path is a designed state, so we stop converting and
+            // record the expense in the currency the user typed, rather than
+            // failing the submit or — worse — multiplying by NaN and persisting
+            // "NaN" as the amount.
+            setSubmitting(false);
+            setRateUnavailable(true);
+            toastError(
+              `Cannot price ${currency} right now`,
+              "Exchange rates are temporarily unavailable. Enter the amount in XLM to continue — nothing you typed has been lost.",
+            );
+            return;
+          }
+
+          exchangeRate = quote.rate;
+          exchangeRateTimestamp = quote.fetchedAtIso;
+          finalXlmAmount = finalXlmAmount * parseFloat(quote.rate);
+
+          if (quote.stale) {
+            // Served from cache past its TTL. The expense is still created —
+            // a slightly old rate beats no expense — but the user is told,
+            // because a silently stale rate is the worst failure mode.
+            toastInfo(
+              "Using a recent exchange rate",
+              `The live rate is unavailable, so a rate from ${describeAge(quote.rateAgeMs)} ago was used.`,
+            );
+          }
         }
 
         const calculatedShares = calculateSplit(
@@ -160,11 +191,27 @@ export function useExpenseForm({
           paidByMemberId,
           splitMode,
         );
+
+        // Round the stored total using the same BigInt half_even path that
+        // the split engine uses. JS float .toFixed() uses half-up rounding,
+        // which can differ from the BigInt engine by 1 minor unit (1 stroop),
+        // causing the displayed share sum to diverge from the stored total.
+        const settlementDecimals = getAssetConfig("XLM").settlementDecimals;
+        const roundedTotalAmount = (() => {
+          try {
+            return format(parse(finalXlmAmount, settlementDecimals), settlementDecimals);
+          } catch {
+            // Fallback: if BigInt parse fails (e.g. NaN from a bad rate), keep
+            // the float representation so the error surfaces at the DB layer.
+            return finalXlmAmount.toFixed(settlementDecimals);
+          }
+        })();
+
         const expense: Expense = {
           id: crypto.randomUUID(),
           title: title.trim(),
           description: description.trim() || undefined,
-          totalAmount: finalXlmAmount.toFixed(7),
+          totalAmount: roundedTotalAmount,
           currency,
           exchangeRate,
           exchangeRateTimestamp,
@@ -192,8 +239,14 @@ export function useExpenseForm({
         setSubmitting(false);
       }
     },
+    // `currency` and `toastInfo` are both read in the body above and belong
+    // here. Omitting `currency` was a live bug, not just a lint gap: the
+    // callback closed over "XLM" from the first render, so switching the
+    // dropdown to USD or INR and submitting skipped the conversion branch
+    // entirely and persisted the typed amount tagged XLM.
     [
       addExpense,
+      currency,
       description,
       members,
       onSuccess,
@@ -201,6 +254,7 @@ export function useExpenseForm({
       splitMode,
       title,
       toastError,
+      toastInfo,
       toastSuccess,
       totalAmount,
       validate,
@@ -223,6 +277,8 @@ export function useExpenseForm({
     setPaidByMemberId,
     submitting,
     errors,
+    /** True when the last submit could not be priced; the form is still filled in. */
+    rateUnavailable,
     namedMembers,
     shares,
     payerName,

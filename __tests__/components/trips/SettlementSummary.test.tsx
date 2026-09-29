@@ -95,7 +95,9 @@ describe("SettlementSummary", () => {
       isConnected: true,
       refreshBalance: jest.fn(),
       network: "testnet",
-    });
+      // Only the fields SettlementSummary actually reads are stubbed; the cast
+      // keeps the partial stub assignable to the full context type.
+    } as unknown as ReturnType<typeof useWallet>);
     mockUseExpense.mockReturnValue({
       expenses: [],
       isLoading: false,
@@ -103,7 +105,7 @@ describe("SettlementSummary", () => {
       addExpense: jest.fn(),
       deleteExpense: jest.fn(),
       markSharePaid: jest.fn(),
-    });
+    } as unknown as ReturnType<typeof useExpense>);
   });
 
   afterEach(() => {

@@ -6,7 +6,12 @@ import { useLocale } from "@/context/LocaleContext";
 import { cn } from "@/lib/utils";
 
 export interface MoneyProps {
-  amount: number | string | bigint;
+  /**
+   * Accepts a `Money`/`Amount` instance as well as a primitive: `formatMoney`
+   * already handles any object exposing `stroops` + `format()`, and callers pass
+   * `Money` values straight through.
+   */
+  amount: number | string | bigint | { stroops: bigint; format?: (decimals?: number) => string };
   asset: string;
   showExact?: boolean;
   direction?: "owe" | "owed" | "none";

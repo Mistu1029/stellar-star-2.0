@@ -2,26 +2,31 @@
 
 import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Scale, CheckCircle2, Database } from "lucide-react";
+import { ArrowRight, Scale, CheckCircle2, Database, ArrowRightLeft } from "lucide-react";
 import type { Expense } from "@/types/expense";
 import type { Trip } from "@/types/trip";
 import type { ContractPaymentEvent } from "@/types/contract";
 import type { NetPayment, RawDebt } from "@/lib/settlement/netBalance";
 import { computeNetPayments } from "@/lib/settlement/netBalance";
+import { settlementAssetOf } from "@/lib/settlement/expenseAsset";
 import { buildPaymentTransaction, trimToMemoBytes } from "@/lib/stellar/buildTransaction";
 import { submitSignedTransaction } from "@/lib/stellar/submitTransaction";
 import { signXDR } from "@/lib/freighter";
 import { useWallet } from "@/hooks/useWallet";
 import { useExpense } from "@/hooks/useExpense";
 import { useToast } from "@/components/ui/Toast";
-import { parseAssetKey, assetKey } from "@/lib/stellar/assets";
+import { parseAssetKey, assetKey, isNative } from "@/lib/stellar/assets";
 import { NETWORK_PASSPHRASE } from "@/lib/utils/constants";
 import { PayButton } from "@/components/payment/PayButton";
 import { TransactionHash } from "@/components/payment/TransactionHash";
+import { PathPaymentConfirm } from "@/components/payment/PathPaymentConfirm";
 import { cn } from "@/lib/utils";
 import { useNetPayment } from "@/hooks/useNetPayment";
+import { usePathPayment } from "@/hooks/usePathPayment";
 import { buildPaymentEventKey } from "@/lib/stellar/events";
-import { Money } from "@/components/ui/Money";
+import { Money as MoneyDisplay } from "@/components/ui/Money";
+import { WalletAddressBadge } from "@/components/ui/WalletAddressBadge";
+import { Money } from "@/lib/money";
 
 interface SettlementSummaryProps {
   trip: Trip;
@@ -47,8 +52,13 @@ function deriveRawDebts(expenses: Expense[]): RawDebt[] {
         toId:       payer.id,
         from:       share.name,
         to:         payer.name,
-        amount:     parseFloat(share.amount),
-        asset:      expense.currency || "XLM",
+        amount:     share.amount,
+        // The SETTLEMENT asset, never `expense.currency` — that is the fiat
+        // the user typed, and `share.amount` was already converted out of it.
+        // Tagging a EUR-entered debt as asset "EUR" put it in its own netting
+        // graph (so offsetting XLM debts never cancelled) and handed "EUR" to
+        // the payment builder as if it were a Stellar asset.
+        asset:      settlementAssetOf(expense),
         fromWallet: share.walletAddress,
         toWallet:   payer.walletAddress,
       });
@@ -58,20 +68,21 @@ function deriveRawDebts(expenses: Expense[]): RawDebt[] {
 }
 
 // Converts an XLM amount (either a number or a string representation) into Stroops (the smallest subunit of XLM).
-export function xlmToStroops(amount: string | number): string {
-  const amountStr = typeof amount === "number" ? amount.toFixed(7) : amount;
-  const [whole, fraction = ""] = amountStr.split(".");
-  const normalizedWhole = whole.replace(/^0+(?=\d)/, "") || "0";
-  const normalizedFraction = (fraction + "0000000").slice(0, 7);
-  return `${BigInt(normalizedWhole) * 10_000_000n + BigInt(normalizedFraction)}`;
+export function xlmToStroops(amount: string | number | Money): string {
+  return Money.parse(amount).toStroops().toString();
 }
 
-// Builds a lookup key for a debt row in the UI to match against on-chain payment keys using the exact trip, expense, debtor wallet, and amount in stroops.
+// Builds a lookup key for a debt row in the UI to match against on-chain payment keys using the exact trip, expense, debtor wallet, amount in stroops, and canonical asset.
 function buildDebtKey(tripId: string, debt: RawDebt) {
   if (!debt.fromWallet) return null;
   const amountStroops = xlmToStroops(debt.amount);
-  const canonicalAsset = assetKey(parseAssetKey(debt.asset));
-  return `${tripId}:${debt.expenseId}:${debt.fromWallet.toLowerCase()}:${amountStroops}:${canonicalAsset}`;
+  return buildPaymentEventKey({
+    tripId,
+    expenseId: debt.expenseId,
+    member: debt.fromWallet,
+    amountStroops,
+    asset: debt.asset,
+  });
 }
 
 function NetPaymentRow({
@@ -93,6 +104,7 @@ function NetPaymentRow({
   const {
     paymentState,
     payNetSettlement,
+    payNetPathSettlement,
     retryOnChainRecord,
     loadPendingForPayer,
     hasPendingRetry,
@@ -102,6 +114,24 @@ function NetPaymentRow({
     isLoading,
     isSuccess,
   } = useNetPayment({ tripId });
+
+  const [showPathConfirm, setShowPathConfirm] = useState(false);
+  const destinationAssetRef = useMemo(() => parseAssetKey(payment.asset), [payment.asset]);
+
+  const {
+    path,
+    loading: pathLoading,
+    failure: pathFailure,
+    slippageBps,
+    setSlippageBps,
+    refreshQuote,
+    clear: clearPathQuote,
+  } = usePathPayment({
+    sourceAccount: publicKey,
+    destinationAccount: payment.toWallet || null,
+    destinationAsset: destinationAssetRef,
+    destinationAmount: payment.amount,
+  });
 
   React.useEffect(() => {
     if (payment.toWallet) {
@@ -126,6 +156,22 @@ function NetPaymentRow({
     });
   };
 
+  const handleOpenPathPayment = () => {
+    setShowPathConfirm(true);
+    refreshQuote();
+  };
+
+  const handleConfirmPathPayment = async () => {
+    if (!path || !payment.toWallet) return;
+    setShowPathConfirm(false);
+    await payNetPathSettlement({
+      debts: payment.settledDebts,
+      tripName,
+      payerWalletAddress: payment.toWallet,
+      path,
+    });
+  };
+
   const done    = isSuccess || onChain;
   const settled = done || isOnChain;
 
@@ -140,15 +186,30 @@ function NetPaymentRow({
       )}
     >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
-        <div className="flex items-center gap-2 min-w-0 text-sm font-semibold text-[#0F0F14]">
-          <span className="truncate">{payment.from}</span>
-          <ArrowRight size={13} className="text-[#2DD4BF] shrink-0" />
-          <span className="truncate">{payment.to}</span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0 text-sm font-semibold text-[#0F0F14]">
+            <span className="truncate">{payment.from}</span>
+            <ArrowRight size={13} className="text-[#2DD4BF] shrink-0" />
+            <span className="truncate">{payment.to}</span>
+          </div>
+          {(payment.fromWallet || payment.toWallet) && (
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+              {payment.fromWallet && (
+                <WalletAddressBadge address={payment.fromWallet} />
+              )}
+              {payment.fromWallet && payment.toWallet && (
+                <ArrowRight size={10} className="shrink-0 text-[#AAA]" />
+              )}
+              {payment.toWallet && (
+                <WalletAddressBadge address={payment.toWallet} />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between sm:justify-end gap-2">
           <span className="text-sm font-bold">
-            <Money amount={payment.amount} asset={payment.asset} />
+            <MoneyDisplay amount={payment.amount} asset={payment.asset} />
           </span>
 
           {hasPendingRetry && paymentState.status === "partial_success" ? (
@@ -173,14 +234,27 @@ function NetPaymentRow({
               )}
             </span>
           ) : (
-            <PayButton
-              amount={payment.amount}
-              recipientName={payment.to}
-              onClick={handlePay}
-              isLoading={isLoading}
-              disabled={!canPay}
-              size="sm"
-            />
+            <div className="flex items-center gap-1.5">
+              <PayButton
+                amount={payment.amount}
+                asset={payment.asset}
+                recipientName={payment.to}
+                onClick={handlePay}
+                isLoading={isLoading}
+                disabled={!canPay}
+                size="sm"
+              />
+              <button
+                type="button"
+                onClick={handleOpenPathPayment}
+                disabled={!canPay || isLoading}
+                title="Convert & pay using an asset you already hold (Stellar DEX path payment)"
+                className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-xl border border-[#E5E5E5] text-[#555] hover:border-[#2DD4BF] hover:text-[#0F0F14] disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold"
+              >
+                <ArrowRightLeft size={11} className="text-[#2DD4BF]" />
+                <span>Convert</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -203,6 +277,22 @@ function NetPaymentRow({
           Connect {payment.from}&apos;s wallet to pay
         </p>
       )}
+
+      <PathPaymentConfirm
+        open={showPathConfirm}
+        onClose={() => {
+          setShowPathConfirm(false);
+          clearPathQuote();
+        }}
+        recipientName={payment.to}
+        path={path}
+        loading={pathLoading}
+        failure={pathFailure}
+        slippageBps={slippageBps}
+        onSlippageChange={setSlippageBps}
+        onRefreshQuote={refreshQuote}
+        onConfirm={handleConfirmPathPayment}
+      />
     </motion.div>
   );
 }

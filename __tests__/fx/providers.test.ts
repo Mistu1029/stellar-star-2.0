@@ -161,8 +161,8 @@ describe("ExchangeRateProvider", () => {
 
   it("handles XLM → FIAT via USD bridge (success)", async () => {
     const provider = new ExchangeRateProvider({
-      fetchImpl: (url: string) => {
-        if (url.includes("/live")) {
+      fetchImpl: (url) => {
+        if (String(url).includes("/live")) {
           // XLM/USD live rate: 1 XLM = 0.10 USD
           return Promise.resolve(okResponse({ quotes: { XLMUSD: 0.10 } }));
         }
@@ -177,8 +177,8 @@ describe("ExchangeRateProvider", () => {
 
   it("returns null when XLM/USD sub-fetch fails", async () => {
     const provider = new ExchangeRateProvider({
-      fetchImpl: (url: string) => {
-        if (url.includes("/live")) return Promise.resolve(errorResponse(503)); // XLM/USD fails.
+      fetchImpl: (url) => {
+        if (String(url).includes("/live")) return Promise.resolve(errorResponse(503)); // XLM/USD fails.
         return Promise.resolve(okResponse({ rates: { USD: 0.012 } }));
       },
     });

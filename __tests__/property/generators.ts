@@ -42,7 +42,7 @@ export function makeMemberArb(index: number, options: GeneratorMemberOptions = {
     id: fc.constant(`m-${index}`),
     name: fc.oneof(
       fc.constant(`Member ${index}`),
-      fc.string({ minLength: 3, maxLength: 12, alphabet: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" })
+      fc.string({ minLength: 3, maxLength: 12, unit: fc.constantFrom(..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") })
     ),
     walletAddress: walletArb,
     weight: weightArb,
@@ -110,7 +110,7 @@ export const assetArb = fc.oneof(
   fc.constant("native"),
   fc.constant("USDC"),
   fc.tuple(
-    fc.string({ minLength: 3, maxLength: 4, alphabet: "ABCDEFGHIJKLMNOPQRSTUVWXYZ" }),
+    fc.string({ minLength: 3, maxLength: 4, unit: fc.constantFrom(..."ABCDEFGHIJKLMNOPQRSTUVWXYZ") }),
     validAddressArb
   ).map(([code, issuer]) => `${code}:${issuer}`)
 );
@@ -132,10 +132,10 @@ export function makeRawDebtsArb(options: DebtGraphOptions = {}): fc.Arbitrary<{ 
     const memberIds = members.map((m) => m.id);
 
     const debtArb = fc.record({
-      expenseId: fc.string({ minLength: 3, maxLength: 8, alphabet: "0123456789abcdef" }),
+      expenseId: fc.string({ minLength: 3, maxLength: 8, unit: fc.constantFrom(..."0123456789abcdef") }),
       fromIdx: fc.integer({ min: 0, max: members.length - 1 }),
       toIdx: fc.integer({ min: 0, max: members.length - 1 }),
-      amount: validAmountFloatArb,
+      amount: validAmountStringArb,
       asset: assetArb,
     });
 

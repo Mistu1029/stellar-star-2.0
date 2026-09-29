@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.schema_migrations (
 
 ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS schema_migrations_read ON public.schema_migrations;
 CREATE POLICY schema_migrations_read ON public.schema_migrations
   FOR SELECT TO authenticated, anon USING (true);
 
@@ -117,9 +118,25 @@ CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
 DO $migrate$
 BEGIN
   -- users
+  -- The legacy `email` column is retired, but dropping it destroys data that
+  -- pre-existing installs may still hold and that this migration cannot undo.
+  -- Rename it out of the way instead: the application no longer reads it, and
+  -- an operator who has confirmed the data is unneeded can drop
+  -- `email_deprecated` deliberately, as a separate decision.
   IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email') THEN
-    ALTER TABLE public.users DROP COLUMN email;
+             WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'users'
+               AND column_name = 'email_deprecated') THEN
+    ALTER TABLE public.users RENAME COLUMN email TO email_deprecated;
+  END IF;
+
+  -- Whether renamed just now or on an earlier run, the column must not block
+  -- inserts that no longer supply it.
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'users'
+               AND column_name = 'email_deprecated' AND is_nullable = 'NO') THEN
+    ALTER TABLE public.users ALTER COLUMN email_deprecated DROP NOT NULL;
   END IF;
 
   UPDATE public.users SET display_name = 'User'
@@ -312,32 +329,30 @@ ALTER TABLE public.auth_challenges    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_rate_limits   ENABLE ROW LEVEL SECURITY;
 
 -- users policies
-DROP POLICY IF EXISTS users_select_own ON public.users;
-DROP POLICY IF EXISTS users_insert_own ON public.users;
-DROP POLICY IF EXISTS users_update_own ON public.users;
 
+DROP POLICY IF EXISTS users_select_own ON public.users;
 CREATE POLICY users_select_own ON public.users
   FOR SELECT TO authenticated, anon USING (true);
 
+DROP POLICY IF EXISTS users_insert_own ON public.users;
 CREATE POLICY users_insert_own ON public.users
   FOR INSERT TO authenticated
   WITH CHECK (public.current_wallet() IS NOT NULL AND wallet_address = public.current_wallet());
 
+DROP POLICY IF EXISTS users_update_own ON public.users;
 CREATE POLICY users_update_own ON public.users
   FOR UPDATE TO authenticated
   USING (wallet_address = public.current_wallet())
   WITH CHECK (wallet_address = public.current_wallet());
 
 -- expenses policies
-DROP POLICY IF EXISTS expenses_select_member ON public.expenses;
-DROP POLICY IF EXISTS expenses_insert_member ON public.expenses;
-DROP POLICY IF EXISTS expenses_update_member ON public.expenses;
-DROP POLICY IF EXISTS expenses_delete_owner  ON public.expenses;
 
+DROP POLICY IF EXISTS expenses_select_member ON public.expenses;
 CREATE POLICY expenses_select_member ON public.expenses
   FOR SELECT TO authenticated
   USING (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets));
 
+DROP POLICY IF EXISTS expenses_insert_member ON public.expenses;
 CREATE POLICY expenses_insert_member ON public.expenses
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -346,25 +361,25 @@ CREATE POLICY expenses_insert_member ON public.expenses
     AND (member_wallets = ARRAY[]::TEXT[] OR public.current_wallet() = ANY (member_wallets))
   );
 
+DROP POLICY IF EXISTS expenses_update_member ON public.expenses;
 CREATE POLICY expenses_update_member ON public.expenses
   FOR UPDATE TO authenticated
   USING (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets))
   WITH CHECK (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets));
 
+DROP POLICY IF EXISTS expenses_delete_owner ON public.expenses;
 CREATE POLICY expenses_delete_owner ON public.expenses
   FOR DELETE TO authenticated
   USING (public.current_wallet() IS NOT NULL AND created_by_wallet = public.current_wallet());
 
 -- trips policies
-DROP POLICY IF EXISTS trips_select_member ON public.trips;
-DROP POLICY IF EXISTS trips_insert_member ON public.trips;
-DROP POLICY IF EXISTS trips_update_member ON public.trips;
-DROP POLICY IF EXISTS trips_delete_owner  ON public.trips;
 
+DROP POLICY IF EXISTS trips_select_member ON public.trips;
 CREATE POLICY trips_select_member ON public.trips
   FOR SELECT TO authenticated
   USING (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets));
 
+DROP POLICY IF EXISTS trips_insert_member ON public.trips;
 CREATE POLICY trips_insert_member ON public.trips
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -373,11 +388,13 @@ CREATE POLICY trips_insert_member ON public.trips
     AND (member_wallets = ARRAY[]::TEXT[] OR public.current_wallet() = ANY (member_wallets))
   );
 
+DROP POLICY IF EXISTS trips_update_member ON public.trips;
 CREATE POLICY trips_update_member ON public.trips
   FOR UPDATE TO authenticated
   USING (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets))
   WITH CHECK (public.current_wallet() IS NOT NULL AND public.current_wallet() = ANY (member_wallets));
 
+DROP POLICY IF EXISTS trips_delete_owner ON public.trips;
 CREATE POLICY trips_delete_owner ON public.trips
   FOR DELETE TO authenticated
   USING (public.current_wallet() IS NOT NULL AND created_by_wallet = public.current_wallet());

@@ -16,6 +16,8 @@ import { TripCard } from "@/components/trips/TripCard";
 import { TripForm } from "@/components/trips/TripForm";
 import { useToast } from "@/components/ui/Toast";
 import type { TripFormData, Trip } from "@/types/trip";
+import { Money } from "@/lib/money";
+import { settlementAssetOf } from "@/lib/settlement/expenseAsset";
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
@@ -173,11 +175,13 @@ export default function TripsPage() {
                   );
                   const totalsByAsset = tripExpenses.reduce(
                     (acc, e) => {
-                      const asset = e.currency || "XLM";
-                      acc[asset] = (acc[asset] || 0) + parseFloat(e.totalAmount);
+                      // Settlement asset, not the typed-in fiat currency.
+                      const asset = settlementAssetOf(e);
+                      const amount = Money.tryParse(e.totalAmount) ?? Money.zero();
+                      acc[asset] = (acc[asset] ?? Money.zero()).plus(amount);
                       return acc;
                     },
-                    {} as Record<string, number>
+                    {} as Record<string, Money>
                   );
                   return (
                     <TripCard

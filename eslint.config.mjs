@@ -21,6 +21,18 @@ const eslintConfig = [
     ],
   },
   ...compat.extends("next/core-web-vitals"),
+
+  // Playwright fixtures destructure an empty pattern (`async ({}, use) => …`)
+  // and call a function named `use`. That is Playwright's fixture API, not the
+  // React `use` hook, but react-hooks/rules-of-hooks matches on the name alone.
+  // The empty pattern is likewise required by Playwright, not an oversight.
+  {
+    files: ["e2e/**/*.ts", "e2e/**/*.tsx", "playwright.config.ts"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
+      "no-empty-pattern": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

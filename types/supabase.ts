@@ -80,6 +80,84 @@ export type AuthRateLimitRow = {
   updated_at: string;
 };
 
+export type TripInviteRow = {
+  id: string;
+  trip_id: string;
+  token_hash: string;
+  member_id: string | null;
+  created_by_wallet: string;
+  expires_at: string;
+  max_uses: number;
+  uses: number;
+  revoked: boolean;
+  revoked_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SettlementIntentRow = {
+  id: string;
+  idempotency_key: string;
+  request_id: string;
+  trip_id: string;
+  expense_id: string;
+  member_id: string;
+  payer_wallet: string;
+  member_wallet: string;
+  amount: string;
+  currency: string;
+  status: "pending" | "submitting" | "submitted" | "recorded" | "failed" | "cancelled";
+  tx_hash: string | null;
+  /** `bigint` in Postgres; supabase-js returns it as a number. */
+  ledger: number | null;
+  on_chain: boolean;
+  error_message: string | null;
+  created_by_wallet: string;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+};
+
+export type SettlementAttestationRow = {
+  id: string;
+  tx_hash: string;
+  expense_id: string;
+  member: string;
+  /** `numeric(30)` — carried as a string so large values keep full precision. */
+  amount_stroops: string;
+  nonce: string;
+  expires_at: number;
+  signature: string;
+  created_at: string;
+};
+
+export type SponsoredAccountRow = {
+  account: string;
+  /** `numeric(30)` — carried as a string so large values keep full precision. */
+  locked_stroops: string;
+  status: "active" | "revoked" | "reclaimed";
+  created_at_ms: number;
+  last_active_at_ms: number;
+  sponsored_by: string;
+  revoked_at_ms: number | null;
+  created_at: string;
+};
+
+export type SponsorshipInviteRow = {
+  id: string;
+  inviter: string;
+  invitee: string;
+  created_at_ms: number;
+  created_at: string;
+};
+
+export type SchemaMigrationRow = {
+  version: string;
+  name: string;
+  applied_at: string;
+  checksum: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -124,6 +202,85 @@ export type Database = {
           settled?: boolean;
         };
         Update: Partial<Omit<TripRow, ServerManaged | "created_by_wallet">>;
+        Relationships: [];
+      };
+      trip_invites: {
+        Row: TripInviteRow;
+        Insert: {
+          id?: string;
+          trip_id: string;
+          token_hash: string;
+          member_id?: string | null;
+          created_by_wallet: string;
+          expires_at?: string;
+          max_uses?: number;
+          uses?: number;
+          revoked?: boolean;
+          revoked_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<TripInviteRow>;
+        Relationships: [];
+      };
+      settlement_intents: {
+        Row: SettlementIntentRow;
+        // Only the identifying/settlement fields are required. Everything the
+        // database defaults (status, on_chain) or that is filled in later as the
+        // transaction progresses (tx_hash, ledger, error_message) is optional.
+        Insert: Pick<
+          SettlementIntentRow,
+          | "idempotency_key"
+          | "request_id"
+          | "trip_id"
+          | "expense_id"
+          | "member_id"
+          | "payer_wallet"
+          | "member_wallet"
+          | "amount"
+          | "created_by_wallet"
+        > &
+          Partial<Omit<SettlementIntentRow, "created_at" | "updated_at">> & {
+            created_at?: string;
+            updated_at?: string;
+          };
+        // `idempotency_key` is absent by design: it is the deduplication key,
+        // so rewriting it would let one settlement be claimed twice.
+        Update: Partial<Omit<SettlementIntentRow, "id" | "idempotency_key" | "created_at">>;
+        Relationships: [];
+      };
+      settlement_attestations: {
+        Row: SettlementAttestationRow;
+        Insert: Omit<SettlementAttestationRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SettlementAttestationRow, "id" | "created_at">>;
+        Relationships: [];
+      };
+      sponsored_accounts: {
+        Row: SponsoredAccountRow;
+        Insert: Omit<SponsoredAccountRow, "status" | "revoked_at_ms" | "created_at"> & {
+          status?: SponsoredAccountRow["status"];
+          revoked_at_ms?: number | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SponsoredAccountRow, "account" | "created_at">>;
+        Relationships: [];
+      };
+      sponsorship_invites: {
+        Row: SponsorshipInviteRow;
+        Insert: Omit<SponsorshipInviteRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<SponsorshipInviteRow, "id" | "created_at">>;
+        Relationships: [];
+      };
+      schema_migrations: {
+        Row: SchemaMigrationRow;
+        Insert: Omit<SchemaMigrationRow, "applied_at"> & { applied_at?: string };
+        Update: Partial<Omit<SchemaMigrationRow, "version">>;
         Relationships: [];
       };
       auth_challenges: {
@@ -182,6 +339,52 @@ export type Database = {
         };
         Returns: Json;
       };
+      claim_trip_invite: {
+        Args: {
+          p_token_hash: string;
+          p_claiming_wallet: string;
+          p_selected_member_id?: string;
+        };
+        Returns: Json;
+      };
+      verify_trip_invite: {
+        Args: {
+          p_token_hash: string;
+        };
+        Returns: Json;
+      };
+      update_expense_versioned: {
+        Args: {
+          p_id: string;
+          p_expected_version: number;
+          p_title: string | null;
+          p_description: string | null;
+          p_total_amount: string | null;
+          p_currency: string | null;
+          p_split_mode: string | null;
+          p_paid_by_member_id: string | null;
+          p_members: Json | null;
+          p_shares: Json | null;
+          p_settled: boolean | null;
+        };
+        Returns: ExpenseRow[];
+      };
+      mark_share_paid: {
+        Args: {
+          p_expense_id: string;
+          p_member_id: string;
+          p_tx_hash: string;
+          p_on_chain?: boolean;
+        };
+        Returns: ExpenseRow[];
+      };
+      mark_shares_paid_batch: {
+        Args: {
+          p_updates: Json;
+          p_tx_hash: string;
+        };
+        Returns: ExpenseRow[];
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
@@ -196,3 +399,11 @@ export type UserInsert = Database["public"]["Tables"]["users"]["Insert"];
 export type UserUpdate = Database["public"]["Tables"]["users"]["Update"];
 export type AuthChallengeInsert = Database["public"]["Tables"]["auth_challenges"]["Insert"];
 
+export type SettlementIntentInsert = Database["public"]["Tables"]["settlement_intents"]["Insert"];
+export type SettlementIntentUpdate = Database["public"]["Tables"]["settlement_intents"]["Update"];
+export type SettlementAttestationInsert =
+  Database["public"]["Tables"]["settlement_attestations"]["Insert"];
+export type SponsoredAccountInsert = Database["public"]["Tables"]["sponsored_accounts"]["Insert"];
+export type SponsoredAccountUpdate = Database["public"]["Tables"]["sponsored_accounts"]["Update"];
+export type SponsorshipInviteInsert = Database["public"]["Tables"]["sponsorship_invites"]["Insert"];
+export type TripInviteInsert = Database["public"]["Tables"]["trip_invites"]["Insert"];

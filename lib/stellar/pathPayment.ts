@@ -138,7 +138,11 @@ export type PathFailureReason =
   /** Horizon could not be reached or errored. Retryable. */
   | "unavailable"
   /** The sender does not hold enough of anything to fund the receive amount. */
-  | "insufficient_balance";
+  | "insufficient_balance"
+  /** A route exists but the order books along it are too thin to fill safely. */
+  | "insufficient_liquidity"
+  /** The quote expired before the user confirmed it; a fresh path is required. */
+  | "stale";
 
 export class PathPaymentError extends Error {
   readonly reason: PathFailureReason;

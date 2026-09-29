@@ -51,6 +51,12 @@ export default function GlobalError({
                 Try again
               </button>
             )}
+            {/*
+              Deliberately a plain <a>, not next/link: global-error replaces the
+              root layout after a crash that may have taken the router with it.
+              A full document load is the only reliable way back.
+            */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-[#E5E5E5] bg-white text-[#555] text-sm font-semibold hover:bg-[#F9F9F9] transition-all cursor-pointer"

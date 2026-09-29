@@ -132,7 +132,7 @@ export function validateAssetRef(ref: unknown): { valid: boolean; error?: string
   if (!isValidAssetCode(code)) {
     return { valid: false, error: `Asset code "${code}" is invalid (must be 1-12 alphanumeric characters).` };
   }
-  if (!isValidIssuer(issuer)) {
+  if (!isValidIssuer(issuer ?? null)) {
     return { valid: false, error: `Asset issuer "${issuer}" is not a valid Stellar public key.` };
   }
   return { valid: true };
@@ -327,7 +327,7 @@ export function parseAssetKey(s: string): AssetRef {
     );
   }
 
-  if (!isValidIssuer(issuer)) {
+  if (!isValidIssuer(issuer ?? null)) {
     throw new Error(
       `Malformed asset key: "${s}". Issuer "${issuer}" is not a valid 56-character Stellar public key.`,
     );

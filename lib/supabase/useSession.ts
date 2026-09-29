@@ -37,3 +37,19 @@ export function useHasSessionFor(walletAddress: string | null | undefined): bool
   const sessionWallet = useSessionWallet();
   return Boolean(walletAddress) && sessionWallet === walletAddress;
 }
+
+/**
+ * The current session as an object, for callers that want to destructure it.
+ *
+ * A thin wrapper over `useAccessToken` / `useSessionWallet` so components can
+ * read `{ sessionToken }` without knowing which primitive holds it.
+ */
+export function useSession(): {
+  sessionToken: string | null;
+  walletAddress: string | null;
+  isAuthenticated: boolean;
+} {
+  const sessionToken = useAccessToken();
+  const walletAddress = useSessionWallet();
+  return { sessionToken, walletAddress, isAuthenticated: sessionToken !== null };
+}

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
-import { buildPaymentTransaction } from "@/lib/stellar/buildTransaction";
+import { buildPaymentTransaction, buildPathPaymentTransaction } from "@/lib/stellar/buildTransaction";
 import { submitSignedTransaction } from "@/lib/stellar/submitTransaction";
+import { isQuoteFresh, type PricedPath } from "@/lib/stellar/pathPayment";
+import { formatAssetLabel } from "@/lib/stellar/assets";
 import {
   recordNetSettlementOnChain,
   precheckPoolBalance,
@@ -24,6 +26,7 @@ import {
   STELLAR_NETWORK,
 } from "@/lib/utils/constants";
 import { reportError } from "@/lib/observability/reportError";
+import { createRequestId } from "@/lib/observability/requestId";
 import { networkMismatchMessage } from "@/lib/stellar/networkMismatch";
 import {
   savePendingNetSettlement,
@@ -57,16 +60,16 @@ interface UseNetPaymentOpts {
   tripId: string;
 }
 
-export interface RawDebt {
-  expenseId: string;
-  fromId: string;
-  toId: string;
-  from: string;
-  to: string;
-  amount: number;
-  fromWallet?: string;
-  toWallet?: string;
-}
+/**
+ * Re-exported from lib/settlement/simplify, the canonical definition.
+ *
+ * This module used to declare its own copy that typed `amount` as `number`,
+ * which both contradicted the exact-arithmetic invariant (money must never pass
+ * through a float) and made the canonical `RawDebt[]` from the settlement layer
+ * unassignable to this hook's own parameters.
+ */
+import type { RawDebt } from "@/lib/settlement/simplify";
+export type { RawDebt };
 
 interface PayNetParams {
   debts: RawDebt[];
@@ -74,6 +77,13 @@ interface PayNetParams {
   asset: string;
   payerWalletAddress: string;
   tripName: string;
+}
+
+export interface PayNetPathParams {
+  debts: RawDebt[];
+  tripName: string;
+  payerWalletAddress: string;
+  path: PricedPath;
 }
 
 export function useNetPayment({ tripId }: UseNetPaymentOpts) {
@@ -194,7 +204,12 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         setDepositLoading(false);
       }
     },
-    [publicKey, loadPoolBalance, toastError, toastSuccess],
+    // `locale` is read via formatMoney above. Without it the callback keeps the
+    // locale from the render that created it — and LocaleProvider starts at
+    // "en-US" and only corrects to the saved or browser locale in a mount
+    // effect, so a de-DE user's deposit toast reported "1,234.57" instead of
+    // "1.234,57" without them having changed any setting.
+    [publicKey, loadPoolBalance, locale, toastError, toastSuccess],
   );
 
   const reset = useCallback((payerPublicKey: string) => {
@@ -204,6 +219,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
   const retryOnChainRecord = useCallback(async () => {
     if (!pendingNetSettlement) return;
+    const requestId = createRequestId();
 
     const poolCheck = await precheckPoolBalance(
       pendingNetSettlement.memberPublicKey,
@@ -227,6 +243,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
     const attested = await fetchAttestationsForDebts(
       {
+        requestId,
         tripId: pendingNetSettlement.tripId,
         payerPublicKey: pendingNetSettlement.payerPublicKey,
         memberPublicKey: pendingNetSettlement.memberPublicKey,
@@ -252,6 +269,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
     const contractResult = await recordNetSettlementOnChain({
       ...pendingNetSettlement,
+      requestId,
       debts: pendingNetSettlement.debts.map((debt, index) => ({
         ...debt,
         attestation: attested.attestations[index],
@@ -285,6 +303,8 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
   const payNetSettlement = useCallback(
     async ({ debts, totalAmount, asset, payerWalletAddress, tripName }: PayNetParams) => {
+      const requestId = createRequestId();
+
       if (!publicKey) {
         toastError("Wallet not connected", "Please connect your Freighter wallet first.");
         return;
@@ -296,13 +316,19 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       if (mismatchMsg) {
         setPaymentState({ status: "blocked", message: mismatchMsg });
         toastError("Network mismatch", mismatchMsg);
-        reportError("payment.blocked-network-mismatch", new Error(mismatchMsg), {
-          stage: "payNetSettlement",
-          totalAmount,
-          tripId,
-          walletNetwork: network,
-          appNetwork: STELLAR_NETWORK,
-        });
+        reportError(
+          "payment.blocked-network-mismatch",
+          new Error(mismatchMsg),
+          {
+            stage: "payNetSettlement",
+            totalAmount,
+            tripId,
+            walletNetwork: network,
+            appNetwork: STELLAR_NETWORK,
+          },
+          "error",
+          requestId,
+        );
         return;
       }
 
@@ -316,6 +342,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       for (const debt of debts) {
         try {
           const res = await acquireSettlementIntent({
+            requestId,
             tripId,
             expenseId: debt.expenseId,
             memberId: debt.fromId,
@@ -330,8 +357,14 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             toastError("Settlement in progress", res.message);
             return;
           }
-        } catch {
-          // non-fatal
+        } catch (err) {
+          reportError(
+            "settlement.intent-acquire-failed",
+            err,
+            { stage: "payNetSettlement", tripId, expenseId: debt.expenseId },
+            "warning",
+            requestId,
+          );
         }
       }
 
@@ -367,7 +400,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
 
         setPaymentState({ status: "submitting" });
-        const result = await submitSignedTransaction(signedXDR);
+        const result = await submitSignedTransaction(signedXDR, requestId);
 
         for (const intent of acquiredIntents) {
           markIntentSubmitted(intent.id, result.hash, result.ledger).catch(() => {});
@@ -388,6 +421,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
           // allocation ledger keeps their total within what was actually paid.
           const attested = await fetchAttestationsForDebts(
             {
+              requestId,
               tripId,
               payerPublicKey: payerWalletAddress,
               memberPublicKey: publicKey,
@@ -401,6 +435,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmount, mappedDebts, memoText);
           } else {
             const contractResult = await recordNetSettlementOnChain({
+              requestId,
               memberPublicKey: publicKey,
               tripId,
               payerPublicKey: payerWalletAddress,
@@ -443,13 +478,19 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             onChain: false,
             message: onChainError,
           });
-          reportError("payment.onchain-proof-failed", new Error(onChainError), {
-            stage: "payNetSettlement",
-            hash: result.hash,
-            ledger: result.ledger,
-            totalAmount,
-            tripId,
-          });
+          reportError(
+            "payment.onchain-proof-failed",
+            new Error(onChainError),
+            {
+              stage: "payNetSettlement",
+              hash: result.hash,
+              ledger: result.ledger,
+              totalAmount,
+              tripId,
+            },
+            "error",
+            requestId,
+          );
           toastInfo(
             "Payment sent — recorded off-chain only",
             "The XLM transfer succeeded, but this settlement has no on-chain proof yet. Use retry to add it.",
@@ -476,11 +517,17 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         const display    = isRejected ? "Transaction cancelled in wallet." : message;
 
       setPaymentState({ status: "error", message: display });
-      reportError("payment.failed", err, {
-        stage: "payNetSettlement",
-        totalAmount,
-        tripId,
-      });
+      reportError(
+        "payment.failed",
+        err,
+        {
+          stage: "payNetSettlement",
+          totalAmount,
+          tripId,
+        },
+        "error",
+        requestId,
+      );
       toastError("Payment failed", display);
     }
     },
@@ -498,9 +545,152 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
     ],
   );
 
+  const payNetPathSettlement = useCallback(
+    async ({ debts, tripName, payerWalletAddress, path }: PayNetPathParams) => {
+      const requestId = createRequestId();
+
+      if (!publicKey) {
+        toastError("Wallet not connected", "Please connect your Freighter wallet first.");
+        return;
+      }
+
+      const mismatchMsg = networkMismatchMessage(network);
+      if (mismatchMsg) {
+        setPaymentState({ status: "blocked", message: mismatchMsg });
+        toastError("Network mismatch", mismatchMsg);
+        reportError(
+          "payment.blocked-network-mismatch",
+          new Error(mismatchMsg),
+          {
+            stage: "payNetPathSettlement",
+            tripId,
+            walletNetwork: network,
+            appNetwork: STELLAR_NETWORK,
+          },
+          "error",
+          requestId,
+        );
+        return;
+      }
+
+      if (!payerWalletAddress) {
+        toastError("No wallet address", "The recipient doesn't have a Stellar address.");
+        return;
+      }
+
+      if (!isQuoteFresh(path)) {
+        toastError("Quote expired", "The exchange rate quote has expired. Refresh quote before confirming.");
+        return;
+      }
+
+      const acquiredIntents: SettlementIntent[] = [];
+      for (const debt of debts) {
+        try {
+          const res = await acquireSettlementIntent({
+            requestId,
+            tripId,
+            expenseId: debt.expenseId,
+            memberId: debt.fromId,
+            payerWallet: payerWalletAddress,
+            memberWallet: publicKey,
+            amount: debt.amount.toString(),
+          });
+          if (res.ok) {
+            acquiredIntents.push(res.intent);
+          } else if (res.code === "IN_PROGRESS") {
+            setPaymentState({ status: "blocked", message: res.message });
+            toastError("Settlement in progress", res.message);
+            return;
+          }
+        } catch (err) {
+          reportError(
+            "settlement.intent-acquire-failed",
+            err,
+            { stage: "payNetPathSettlement", tripId, expenseId: debt.expenseId },
+            "warning",
+            requestId,
+          );
+        }
+      }
+
+      try {
+        setPaymentState({ status: "building" });
+        const memoText = tripName;
+        const { xdr } = await buildPathPaymentTransaction({
+          sourcePublicKey: publicKey,
+          destinationPublicKey: payerWalletAddress,
+          path,
+          memoText,
+        });
+
+        setPaymentState({ status: "signing" });
+        toastInfo("Waiting for wallet signature...", "Confirm path payment in Freighter.");
+        const signedXDR = await signXDR(xdr, NETWORK_PASSPHRASE);
+
+        setPaymentState({ status: "submitting" });
+        const result = await submitSignedTransaction(signedXDR, requestId);
+
+        for (const intent of acquiredIntents) {
+          markIntentSubmitted(intent.id, result.hash, result.ledger).catch(() => {});
+        }
+
+        for (const debt of debts) {
+          try {
+            await markSharePaid(debt.expenseId, debt.fromId, result.hash);
+          } catch {
+            // non-fatal
+          }
+        }
+
+        for (const intent of acquiredIntents) {
+          markIntentRecorded(intent.id, result.ledger, false).catch(() => {});
+        }
+
+        setPaymentState({ status: "success", hash: result.hash, ledger: result.ledger, onChain: false });
+        const destLabel = formatAssetLabel(path.destinationAsset);
+        const srcLabel = formatAssetLabel(path.sourceAsset);
+        toastSuccess(
+          "Path payment sent!",
+          `Spent up to ${path.sendMax} ${srcLabel} -> recipient received exact ${path.destinationAmount} ${destLabel}.`,
+        );
+
+        setTimeout(() => refreshBalance(), 3000);
+        setTimeout(() => refreshBalance(), 8000);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Path payment failed.";
+        const isRejected = /reject|denied|cancel/i.test(message.toLowerCase());
+        const display = isRejected ? "Transaction cancelled in wallet." : message;
+
+        setPaymentState({ status: "error", message: display });
+        reportError(
+          "payment.path-failed",
+          err,
+          {
+            stage: "payNetPathSettlement",
+            tripId,
+          },
+          "error",
+          requestId,
+        );
+        toastError("Payment failed", display);
+      }
+    },
+    [
+      publicKey,
+      tripId,
+      markSharePaid,
+      refreshBalance,
+      toastSuccess,
+      toastError,
+      toastInfo,
+      network,
+    ],
+  );
+
   return {
     paymentState,
     payNetSettlement,
+    payNetPathSettlement,
     reset,
     retryOnChainRecord,
     loadPendingForPayer,
