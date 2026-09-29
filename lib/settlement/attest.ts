@@ -151,7 +151,7 @@ export async function requestAttestation(claim: AttestationRequest): Promise<Att
  */
 export function verifyAttestation(attestation: Attestation): boolean {
   try {
-    const expectedOracle = ORACLE_PUBLIC_KEY;
+    const expectedOracle = process.env.NEXT_PUBLIC_SETTLEMENT_ORACLE_PUBLIC_KEY || ORACLE_PUBLIC_KEY;
     if (!expectedOracle) return false;
     if (attestation.oraclePublicKey !== expectedOracle) return false;
 

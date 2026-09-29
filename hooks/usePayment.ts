@@ -35,6 +35,7 @@ import {
 } from "@/lib/utils/pendingOnChain";
 import {
   acquireSettlementIntent,
+  upsertSettlementIntent,
   markIntentSubmitted,
   markIntentRecorded,
   markIntentFailed,
@@ -148,8 +149,8 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
   useEffect(() => {
     if (!publicKey) return;
 
-    // 1. Device-agnostic reconciliation: check Supabase settlement intents
-    reconcilePendingIntentsForWallet(publicKey).then((results) => {
+    // 1. Device-agnostic reconciliation: check Supabase settlement intents (read-only without wallet popup)
+    reconcilePendingIntentsForWallet(publicKey, undefined, { allowActiveSubmission: false }).then((results) => {
       // Find if the current expense has a pending on-chain record that needs signing
       const needsSignature = results.find(
         (r) => r.needsOnChainSignature && r.intentId.includes(expenseId)
@@ -194,7 +195,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
       });
     }
     // Only run once per (publicKey, expenseId) combination — intentional deps.
-  }, [publicKey, expenseId, pendingOnChain]);
+  }, [publicKey, expenseId]);
 
   // ---------------------------------------------------------------------------
   // Pool balance
@@ -424,6 +425,7 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
           payerWallet: payerWalletAddress,
           memberWallet: publicKey,
           amount: share.amount,
+          txHash: pendingOnChain?.txHash,
         });
 
         if (!intentResult.ok) {
@@ -502,6 +504,24 @@ export function usePayment({ expenseId }: UsePaymentOpts) {
             await markIntentSubmitted(intent.id, result.hash, result.ledger);
           } catch (err) {
             console.warn("[usePayment] Failed to update intent status to submitted:", err);
+          }
+        } else {
+          try {
+            intent = await upsertSettlementIntent({
+              requestId,
+              tripId: tripId ?? "none",
+              expenseId,
+              memberId: share.memberId,
+              payerWallet: payerWalletAddress,
+              memberWallet: publicKey,
+              amount: share.amount,
+              currency: "XLM",
+              status: "submitted",
+              txHash: result.hash,
+              ledger: result.ledger,
+            });
+          } catch (err) {
+            console.warn("[usePayment] Failed to upsert intent on submit:", err);
           }
         }
 
