@@ -1604,6 +1604,10 @@ CREATE INDEX IF NOT EXISTS settlement_intents_expense_member_idx
 CREATE INDEX IF NOT EXISTS settlement_intents_request_id_idx
   ON public.settlement_intents (request_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS settlement_intents_tx_expense_member_asset_idx
+  ON public.settlement_intents (tx_hash, expense_id, member_id, currency)
+  WHERE tx_hash IS NOT NULL;
+
 -- ─── UPDATED_AT TRIGGER ──────────────────────────────────────────────────────
 DROP TRIGGER IF EXISTS settlement_intents_set_updated_at ON public.settlement_intents;
 CREATE TRIGGER settlement_intents_set_updated_at
