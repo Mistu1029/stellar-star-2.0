@@ -28,6 +28,7 @@ import {
   mergeExpenseUpdates,
   type ConflictDetails,
 } from "@/lib/expense/conflictResolver";
+import type { QueryCacheDomain } from "./cacheInvalidation";
 
 export { ExpenseConflictError, type ConflictDetails };
 
@@ -40,6 +41,30 @@ export interface UserProfile {
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string;
+}
+
+export type CacheAwareMutation =
+  | "trip_write"
+  | "trip_members_write"
+  | "trip_expense_link"
+  | "expense_write";
+
+/**
+ * Central dependency map for database writes. Contexts publish these domains
+ * after a successful mutation so every view that derives data from the write
+ * revalidates, not only the collection that performed it.
+ */
+export function cacheDomainsForMutation(
+  mutation: CacheAwareMutation,
+): readonly QueryCacheDomain[] {
+  switch (mutation) {
+    case "trip_write":
+      return ["trips"];
+    case "trip_members_write":
+    case "trip_expense_link":
+    case "expense_write":
+      return ["trips", "expenses"];
+  }
 }
 
 // ─── Error translation ────────────────────────────────────────────────────────
