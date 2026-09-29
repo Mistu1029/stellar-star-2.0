@@ -678,6 +678,20 @@ export async function createSettlementIntentRow(
   return rowToSettlementIntent(unwrap(result, "record settlement intent") as SettlementIntentRow);
 }
 
+export async function upsertSettlementIntentRow(
+  payload: SettlementIntentInsert,
+  client: StellarStarClient = requireAuthenticatedClient(),
+  onConflict: string = "idempotency_key"
+): Promise<SettlementIntent> {
+  const result = await client
+    .from("settlement_intents")
+    .upsert(payload, { onConflict })
+    .select(SETTLEMENT_INTENT_COLUMNS)
+    .single();
+
+  return rowToSettlementIntent(unwrap(result, "upsert settlement intent") as SettlementIntentRow);
+}
+
 export async function updateSettlementIntentRow(
   id: string,
   updates: Partial<SettlementIntentUpdate>,
@@ -747,6 +761,48 @@ export async function fetchSettlementIntentByExpenseAndMember(
   if (error) {
     if (isMissingTable(error)) return null;
     throw toDatabaseError(error, "load settlement intent");
+  }
+  return data ? rowToSettlementIntent(data as SettlementIntentRow) : null;
+}
+
+export async function fetchSettlementIntentByTxHash(
+  txHash: string,
+  client: StellarStarClient = requireAuthenticatedClient()
+): Promise<SettlementIntent | null> {
+  const { data, error } = await client
+    .from("settlement_intents")
+    .select(SETTLEMENT_INTENT_COLUMNS)
+    .eq("tx_hash", txHash)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw toDatabaseError(error, "load settlement intent by txHash");
+  }
+  return data ? rowToSettlementIntent(data as SettlementIntentRow) : null;
+}
+
+export async function fetchSettlementIntentByPayment(
+  txHash: string,
+  expenseId: string,
+  memberId: string,
+  client: StellarStarClient = requireAuthenticatedClient()
+): Promise<SettlementIntent | null> {
+  const { data, error } = await client
+    .from("settlement_intents")
+    .select(SETTLEMENT_INTENT_COLUMNS)
+    .eq("tx_hash", txHash)
+    .eq("expense_id", expenseId)
+    .eq("member_id", memberId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw toDatabaseError(error, "load settlement intent by payment");
   }
   return data ? rowToSettlementIntent(data as SettlementIntentRow) : null;
 }
