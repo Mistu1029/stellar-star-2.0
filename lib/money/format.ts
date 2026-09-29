@@ -1,5 +1,6 @@
 import { type AssetRef } from "@/lib/stellar/assets";
 import { divideBigInt } from "./amount";
+import { getAssetPrecision } from "./assetPrecision";
 
 export interface AssetFormattingConfig {
   /**
@@ -21,35 +22,26 @@ export interface AssetFormattingConfig {
   name: string;
 }
 
-// XLM display precision is intentionally kept at 7 to match the Stellar
-// ledger (1 stroop = 10^-7 XLM). Using fewer display digits (e.g. 4) caused
-// formatMoney to round at a different threshold than the BigInt split engine,
-// producing share totals that differed from the displayed expense total.
-const ASSET_CONFIGS: Record<string, AssetFormattingConfig> = {
-  USD:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "US Dollars" },
-  EUR:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "Euros" },
-  INR:  { decimals: 2, settlementDecimals: 2, isFiat: true,  name: "Indian Rupees" },
-  JPY:  { decimals: 0, settlementDecimals: 0, isFiat: true,  name: "Japanese Yen" },
-  XLM:  { decimals: 7, settlementDecimals: 7, isFiat: false, name: "Stellar Lumens" },
-  USDC: { decimals: 7, settlementDecimals: 7, isFiat: false, name: "USDC" },
+const ASSET_NAMES: Record<string, string> = {
+  USD: "US Dollars",
+  EUR: "Euros",
+  INR: "Indian Rupees",
+  JPY: "Japanese Yen",
+  XLM: "Stellar Lumens",
+  USDC: "USDC",
 };
 
 /**
  * Resolves the display decimal places, asset type, and name for any ticker.
  */
 export function getAssetConfig(asset: string): AssetFormattingConfig {
-  const upper = asset.toUpperCase();
-  if (ASSET_CONFIGS[upper]) return ASSET_CONFIGS[upper];
-
-  // Check dynamically if it is a valid ISO currency code
-  try {
-    const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency: upper });
-    const decimals = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-    return { decimals, settlementDecimals: decimals, isFiat: true, name: upper };
-  } catch {
-    // If invalid, treat as custom crypto token (7dp to match Stellar precision)
-    return { decimals: 7, settlementDecimals: 7, isFiat: false, name: upper };
-  }
+  const precision = getAssetPrecision(asset);
+  return {
+    decimals: precision.displayDecimals,
+    settlementDecimals: precision.ledgerDecimals ?? precision.displayDecimals,
+    isFiat: precision.kind === "fiat",
+    name: ASSET_NAMES[precision.code] ?? precision.code,
+  };
 }
 
 export interface FormatMoneyResult {
@@ -305,4 +297,3 @@ export function adjustAmountsForDisplay(
     return `${sign}${wholePart.toString()}.${fracPart}`;
   });
 }
-
