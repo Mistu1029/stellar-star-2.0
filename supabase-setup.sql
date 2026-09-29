@@ -110,7 +110,6 @@ CREATE INDEX IF NOT EXISTS auth_challenges_address_idx ON public.auth_challenges
 -- These exist in migrations/0001_baseline.sql and are mirrored here so both
 -- provisioning paths converge on the same indexes.
 CREATE INDEX IF NOT EXISTS auth_challenges_expiration_idx ON public.auth_challenges (expiration);
-CREATE INDEX IF NOT EXISTS auth_rate_limits_window_idx ON public.auth_rate_limits (window_start);
 
 CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
   key            TEXT PRIMARY KEY,
@@ -118,6 +117,8 @@ CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
   window_start   BIGINT NOT NULL,
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS auth_rate_limits_window_idx ON public.auth_rate_limits (window_start);
 
 ALTER TABLE public.auth_challenges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auth_rate_limits ENABLE ROW LEVEL SECURITY;
@@ -376,12 +377,23 @@ CREATE INDEX IF NOT EXISTS idx_expenses_member_wallets ON public.expenses USING 
 CREATE INDEX IF NOT EXISTS idx_expenses_creator        ON public.expenses (created_by_wallet);
 CREATE INDEX IF NOT EXISTS idx_expenses_created_at     ON public.expenses (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_expenses_settled        ON public.expenses (settled);
+CREATE INDEX IF NOT EXISTS idx_expenses_creator_created_at
+  ON public.expenses (created_by_wallet, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_expenses_settled_created_at
+  ON public.expenses (settled, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_trips_member_wallets    ON public.trips USING GIN (member_wallets);
 CREATE INDEX IF NOT EXISTS idx_trips_creator           ON public.trips (created_by_wallet);
 CREATE INDEX IF NOT EXISTS idx_trips_created_at        ON public.trips (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trips_settled           ON public.trips (settled);
 CREATE INDEX IF NOT EXISTS idx_trips_expense_ids       ON public.trips USING GIN (expense_ids);
+CREATE INDEX IF NOT EXISTS idx_trips_creator_created_at
+  ON public.trips (created_by_wallet, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trips_settled_created_at
+  ON public.trips (settled, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS auth_challenges_address_created_at_idx
+  ON public.auth_challenges (address, created_at ASC);
 
 
 -- ============================================================================
@@ -607,6 +619,63 @@ create table if not exists public.sponsored_accounts (
   created_at       timestamptz not null default now()
 );
 
+-- Reconcile the legacy sponsored_accounts shape used by early installs before
+-- creating indexes on the current ledger columns.
+DO $sponsored_accounts_shape$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sponsored_accounts'
+       AND column_name = 'account_id'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sponsored_accounts'
+       AND column_name = 'account'
+  ) THEN
+    ALTER TABLE public.sponsored_accounts RENAME COLUMN account_id TO account;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sponsored_accounts'
+       AND column_name = 'sponsor'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sponsored_accounts'
+       AND column_name = 'sponsored_by'
+  ) THEN
+    ALTER TABLE public.sponsored_accounts RENAME COLUMN sponsor TO sponsored_by;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'sponsored_accounts'
+       AND column_name = 'operation_id'
+  ) THEN
+    ALTER TABLE public.sponsored_accounts ALTER COLUMN operation_id DROP NOT NULL;
+  END IF;
+END
+$sponsored_accounts_shape$;
+
+ALTER TABLE public.sponsored_accounts
+  ADD COLUMN IF NOT EXISTS locked_stroops NUMERIC(30) NOT NULL DEFAULT 1
+    CHECK (locked_stroops > 0),
+  ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'revoked', 'reclaimed')),
+  ADD COLUMN IF NOT EXISTS created_at_ms BIGINT,
+  ADD COLUMN IF NOT EXISTS last_active_at_ms BIGINT,
+  ADD COLUMN IF NOT EXISTS sponsored_by TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS revoked_at_ms BIGINT;
+
+UPDATE public.sponsored_accounts
+   SET created_at_ms = COALESCE(created_at_ms, (extract(epoch FROM created_at) * 1000)::BIGINT),
+       last_active_at_ms = COALESCE(last_active_at_ms, (extract(epoch FROM created_at) * 1000)::BIGINT)
+ WHERE created_at_ms IS NULL OR last_active_at_ms IS NULL;
+
+ALTER TABLE public.sponsored_accounts
+  ALTER COLUMN created_at_ms SET NOT NULL,
+  ALTER COLUMN last_active_at_ms SET NOT NULL;
+
 -- The cap is computed by summing active rows, so this index is what keeps that
 -- read cheap enough to run on every sponsorship request.
 create index if not exists sponsored_accounts_status_idx
@@ -673,6 +742,8 @@ CREATE TABLE IF NOT EXISTS public.trip_invites (
 CREATE INDEX IF NOT EXISTS idx_trip_invites_token_hash ON public.trip_invites (token_hash);
 CREATE INDEX IF NOT EXISTS idx_trip_invites_trip_id    ON public.trip_invites (trip_id);
 CREATE INDEX IF NOT EXISTS idx_trip_invites_creator    ON public.trip_invites (created_by_wallet);
+CREATE INDEX IF NOT EXISTS idx_trip_invites_trip_created_at
+  ON public.trip_invites (trip_id, created_at DESC);
 
 ALTER TABLE public.trip_invites ENABLE ROW LEVEL SECURITY;
 
@@ -1597,6 +1668,9 @@ CREATE TABLE IF NOT EXISTS public.settlement_intents (
 CREATE INDEX IF NOT EXISTS settlement_intents_member_status_idx
   ON public.settlement_intents (member_wallet, status);
 
+CREATE INDEX IF NOT EXISTS settlement_intents_member_status_created_at_idx
+  ON public.settlement_intents (member_wallet, status, created_at DESC);
+
 -- fetchSettlementIntentByExpenseAndMember orders by created_at within the pair.
 CREATE INDEX IF NOT EXISTS settlement_intents_expense_member_idx
   ON public.settlement_intents (expense_id, member_id, created_at DESC);
@@ -1662,7 +1736,6 @@ VALUES
   ('0003', '0003_trip_invitations_capabilities', 'trip_invites_capability_checksum'),
   ('0004', '0004_settlement_intents', 'settlement_intents_v1'),
   ('0005', '0005_verify_trip_invite_rpc', 'verify_trip_invite_v1'),
-  ('0006', '0006_settlement_request_ids', 'settlement_request_ids_v1')
+  ('0006', '0006_settlement_request_ids', 'settlement_request_ids_v1'),
+  ('0007', '0007_composite_query_indexes', 'composite_query_indexes_v1')
 ON CONFLICT (version) DO NOTHING;
-
-

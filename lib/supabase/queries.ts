@@ -416,6 +416,9 @@ export async function updateUserDisplayName(
 export async function fetchExpenses(
   client: StellarStarClient = requireAuthenticatedClient()
 ): Promise<Expense[]> {
+  // Index contract: the member_wallets RLS predicate uses the GIN-indexable
+  // containment form; newest/status dashboard paths are covered by migration
+  // 0007's created_at composites.
   const { data, error } = await client
     .from("expenses")
     .select(EXPENSE_COLUMNS)
@@ -697,6 +700,8 @@ export async function fetchActiveSettlementIntents(
   walletAddress: string,
   client: StellarStarClient = requireAuthenticatedClient()
 ): Promise<SettlementIntent[]> {
+  // Covered in this exact order by
+  // settlement_intents_member_status_created_at_idx.
   const { data, error } = await client
     .from("settlement_intents")
     .select(SETTLEMENT_INTENT_COLUMNS)
@@ -764,6 +769,8 @@ export async function deleteSettlementIntentRow(
 export async function fetchTrips(
   client: StellarStarClient = requireAuthenticatedClient()
 ): Promise<Trip[]> {
+  // As with expenses, RLS uses member_wallets @> ARRAY[current_wallet()] so the
+  // GIN membership index participates before the newest-first ordering.
   const { data, error } = await client
     .from("trips")
     .select(TRIP_COLUMNS)
