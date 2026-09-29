@@ -42,6 +42,7 @@ import {
   type SettlementIntent,
 } from "@/lib/settlement/intent";
 import { reconcilePendingIntentsForWallet } from "@/lib/settlement/reconcile";
+import { prepareSettlementAmount } from "@/lib/settlement/settle";
 
 type OnChainStep = "simulating" | "signing" | "sending" | "confirming";
 
@@ -337,9 +338,23 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         return;
       }
 
+      let ledgerAmount: string;
+      let debtLedgerAmounts: string[];
+      try {
+        ledgerAmount = prepareSettlementAmount(totalAmount, asset);
+        debtLedgerAmounts = debts.map((debt) =>
+          prepareSettlementAmount(debt.amount.toString(), asset),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid settlement amount.";
+        setPaymentState({ status: "blocked", message });
+        toastError("Invalid settlement amount", message);
+        return;
+      }
+
       // Pre-flight: Acquire durable settlement intents for all debts
       const acquiredIntents: SettlementIntent[] = [];
-      for (const debt of debts) {
+      for (const [index, debt] of debts.entries()) {
         try {
           const res = await acquireSettlementIntent({
             requestId,
@@ -348,7 +363,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
             memberId: debt.fromId,
             payerWallet: payerWalletAddress,
             memberWallet: publicKey,
-            amount: debt.amount.toString(),
+            amount: debtLedgerAmounts[index],
           });
           if (res.ok) {
             acquiredIntents.push(res.intent);
@@ -371,7 +386,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       try {
         // Pool check only applies to XLM settlements since the pool only stores XLM.
         if (CONTRACT_ID && tripId && asset === "native") {
-          const poolCheck = await precheckPoolBalance(publicKey, publicKey, totalAmount);
+          const poolCheck = await precheckPoolBalance(publicKey, publicKey, ledgerAmount);
           if (!poolCheck.ok) {
             const msg =
               poolCheck.error ?? "Add enough pool credit before sending this settlement.";
@@ -390,7 +405,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         const { xdr } = await buildPaymentTransaction({
           sourcePublicKey:      publicKey,
           destinationPublicKey: payerWalletAddress,
-          amount:               totalAmount,
+          amount:               ledgerAmount,
           asset:                asset,
           memoText,
         });
@@ -409,7 +424,10 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         let onChain = false;
         let onChainError: string | null = null;
         
-        const mappedDebts = debts.map(d => ({ expenseId: d.expenseId, amountXlm: d.amount.toString() }));
+        const mappedDebts = debts.map((debt, index) => ({
+          expenseId: debt.expenseId,
+          amountXlm: debtLedgerAmounts[index],
+        }));
 
         // We only attempt to record on-chain if the asset is native (XLM)
         // because the contract currently uses SETTLEMENT_ASSET_ID which is XLM.
@@ -432,7 +450,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
           if (!attested.ok) {
             onChainError = attested.message;
-            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmount, mappedDebts, memoText);
+            buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, ledgerAmount, mappedDebts, memoText);
           } else {
             const contractResult = await recordNetSettlementOnChain({
               requestId,
@@ -452,7 +470,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
               loadPoolBalance();
             } else {
               onChainError = contractResult.error ?? "On-chain recording failed.";
-              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, totalAmount, mappedDebts, memoText);
+              buildAndPersistPending(result.hash, result.ledger, payerWalletAddress, ledgerAmount, mappedDebts, memoText);
             }
           }
         }
@@ -485,7 +503,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
               stage: "payNetSettlement",
               hash: result.hash,
               ledger: result.ledger,
-              totalAmount,
+              totalAmount: ledgerAmount,
               tripId,
             },
             "error",
@@ -502,11 +520,12 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
 
         setPaymentState({ status: "success", hash: result.hash, ledger: result.ledger, onChain });
         const displayAsset = asset === "native" ? "XLM" : asset.split(":")[0];
+        const { formatted: displayAmount } = formatMoney(ledgerAmount, displayAsset, locale);
         toastSuccess(
           `Settlement sent!`,
           onChain
-            ? `Paid ${parseFloat(totalAmount).toFixed(4)} ${displayAsset}. TX: ${result.hash.slice(0, 12)}... · Recorded on-chain`
-            : `Paid ${parseFloat(totalAmount).toFixed(4)} ${displayAsset}. TX: ${result.hash.slice(0, 12)}...`,
+            ? `Paid ${displayAmount}. TX: ${result.hash.slice(0, 12)}... · Recorded on-chain`
+            : `Paid ${displayAmount}. TX: ${result.hash.slice(0, 12)}...`,
         );
 
         setTimeout(() => refreshBalance(), 3000);
@@ -522,7 +541,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
         err,
         {
           stage: "payNetSettlement",
-          totalAmount,
+          totalAmount: ledgerAmount,
           tripId,
         },
         "error",
@@ -542,6 +561,7 @@ export function useNetPayment({ tripId }: UseNetPaymentOpts) {
       loadPoolBalance,
       buildAndPersistPending,
       network,
+      locale,
     ],
   );
 

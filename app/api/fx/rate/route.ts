@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         rate: 1,
+        rateDecimal: "1",
         source: "identity",
         fetchedAt: Date.now(),
         stale: false,

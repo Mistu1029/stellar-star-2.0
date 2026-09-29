@@ -11,8 +11,8 @@ import {
 import { validateAmount } from "@/lib/expense/validation";
 import type { Expense, Member, SplitMode } from "@/types/expense";
 import { fetchExchangeRate, describeAge } from "@/lib/fx/quote";
-import { getAssetConfig } from "@/lib/money/format";
-import { parse, format } from "@/lib/money/amount";
+import { convertAssetAmount, toLedgerAmount } from "@/lib/money/assetPrecision";
+import { Money } from "@/lib/money";
 
 export interface UseExpenseFormOptions {
   onSuccess?: (expenseId?: string) => void;
@@ -104,8 +104,8 @@ export function useExpenseForm({
 
   const namedMembers = useMemo(() => members.filter((member) => member.name.trim()), [members]);
   const shares = useMemo(() => {
-    const amount = parseFloat(totalAmount);
-    if (Number.isNaN(amount) || amount <= 0 || namedMembers.length < 2) return [];
+    const amount = Money.tryParse(totalAmount);
+    if (!amount || !amount.isPositive() || namedMembers.length < 2) return [];
     return calculateSplit(amount, namedMembers, paidByMemberId, splitMode);
   }, [totalAmount, namedMembers, paidByMemberId, splitMode]);
   const payerName = members.find((member) => member.id === paidByMemberId)?.name || "Payer";
@@ -147,7 +147,7 @@ export function useExpenseForm({
           ...member,
           walletAddress: member.walletAddress?.trim(),
         }));
-        let finalXlmAmount = parseFloat(totalAmount);
+        let finalSettlementAmount = toLedgerAmount(totalAmount, "XLM");
         let exchangeRate: string | undefined = undefined;
         let exchangeRateTimestamp: string | undefined = undefined;
 
@@ -171,7 +171,12 @@ export function useExpenseForm({
 
           exchangeRate = quote.rate;
           exchangeRateTimestamp = quote.fetchedAtIso;
-          finalXlmAmount = finalXlmAmount * parseFloat(quote.rate);
+          finalSettlementAmount = convertAssetAmount(
+            totalAmount,
+            currency,
+            "XLM",
+            quote.rate,
+          );
 
           if (quote.stale) {
             // Served from cache past its TTL. The expense is still created —
@@ -185,32 +190,17 @@ export function useExpenseForm({
         }
 
         const calculatedShares = calculateSplit(
-          finalXlmAmount,
+          finalSettlementAmount,
           cleanMembers,
           paidByMemberId,
           splitMode,
         );
 
-        // Round the stored total using the same BigInt half_even path that
-        // the split engine uses. JS float .toFixed() uses half-up rounding,
-        // which can differ from the BigInt engine by 1 minor unit (1 stroop),
-        // causing the displayed share sum to diverge from the stored total.
-        const settlementDecimals = getAssetConfig("XLM").settlementDecimals;
-        const roundedTotalAmount = (() => {
-          try {
-            return format(parse(finalXlmAmount, settlementDecimals), settlementDecimals);
-          } catch {
-            // Fallback: if BigInt parse fails (e.g. NaN from a bad rate), keep
-            // the float representation so the error surfaces at the DB layer.
-            return finalXlmAmount.toFixed(settlementDecimals);
-          }
-        })();
-
         const expense: Expense = {
           id: crypto.randomUUID(),
           title: title.trim(),
           description: description.trim() || undefined,
-          totalAmount: roundedTotalAmount,
+          totalAmount: finalSettlementAmount,
           currency,
           exchangeRate,
           exchangeRateTimestamp,
